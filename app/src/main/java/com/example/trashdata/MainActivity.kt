@@ -7,39 +7,112 @@ import android.os.Environment
 import android.provider.Settings
 import android.content.Intent
 import android.net.Uri
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
+import android.widget.*
 import java.io.File
+import androidx.work.*
+import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
+
+    private lateinit var layout: LinearLayout
+    private lateinit var statusText: TextView
+    private lateinit var counterText: TextView
+    private lateinit var progressBar: ProgressBar
+
+    private var scanning = false
+    private var fileCount = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val scrollView = ScrollView(this)
-        val layout = LinearLayout(this).apply {
+
+        layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setPadding(30,30,30,30)
         }
+
+        statusText = TextView(this)
+        statusText.text = "Status: Idle"
+
+        counterText = TextView(this)
+        counterText.text = "Files scanned: 0"
+
+        progressBar = ProgressBar(this)
+        progressBar.visibility = ProgressBar.GONE
+
+        val startButton = Button(this)
+        startButton.text = "Start Scan"
+
+        val stopButton = Button(this)
+        stopButton.text = "Stop Scan"
+
+        val clearButton = Button(this)
+        clearButton.text = "Clear Results"
+
+        layout.addView(statusText)
+        layout.addView(counterText)
+        layout.addView(startButton)
+        layout.addView(stopButton)
+        layout.addView(clearButton)
+        layout.addView(progressBar)
 
         scrollView.addView(layout)
         setContentView(scrollView)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                requestAllFilesPermission()
-            } else {
-                startScan(layout)
+        startButton.setOnClickListener {
+            startScan()
+        }
+
+        stopButton.setOnClickListener {
+            scanning = false
+            statusText.text = "Status: Stopped"
+            progressBar.visibility = ProgressBar.GONE
+        }
+
+        clearButton.setOnClickListener {
+            if (layout.childCount > 6) {
+                layout.removeViews(6, layout.childCount - 6)
             }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+
+            if (!Environment.isExternalStorageManager()) {
+
+                requestAllFilesPermission()
+
+            } else {
+
+                startBackgroundScan()
+
+            }
+
         } else {
-            startScan(layout)
+
+            startBackgroundScan()
+
         }
     }
 
-    private fun startScan(layout: LinearLayout) {
+    private fun startScan() {
+
+        scanning = true
+        fileCount = 0
+
+        statusText.text = "Status: Scanning..."
+        progressBar.visibility = ProgressBar.VISIBLE
+
         Thread {
+
             val storageDir = Environment.getExternalStorageDirectory()
-            listFilesRecursive(storageDir, layout, "")
+            listFilesRecursive(storageDir, "")
+
+            runOnUiThread {
+                statusText.text = "Status: Scan Complete"
+                progressBar.visibility = ProgressBar.GONE
+            }
+
         }.start()
     }
 
@@ -54,7 +127,23 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun listFilesRecursive(dir: File, layout: LinearLayout, indent: String) {
+    private fun startBackgroundScan() {
+
+        val workRequest =
+            PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES)
+                .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "trashdata_scan",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
+    }
+
+    private fun listFilesRecursive(dir: File, indent: String) {
+
+        if (!scanning) return
+        if (dir.absolutePath.contains("/Android/")) return
 
         val now = System.currentTimeMillis()
         val fiveMinutes = 5 * 60 * 1000
@@ -63,6 +152,10 @@ class MainActivity : Activity() {
         val files = dir.listFiles() ?: return
 
         for (file in files) {
+
+            if (!scanning) return
+
+            fileCount++
 
             val diff = now - file.lastModified()
 
@@ -73,13 +166,17 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
+
+                counterText.text = "Files scanned: $fileCount"
+
                 val textView = TextView(this)
                 textView.text = text
                 layout.addView(textView)
+
             }
 
             if (file.isDirectory) {
-                listFilesRecursive(file, layout, "$indent    ")
+                listFilesRecursive(file, "$indent    ")
             }
         }
     }
