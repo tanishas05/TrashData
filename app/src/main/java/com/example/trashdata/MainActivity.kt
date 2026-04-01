@@ -37,63 +37,87 @@ class MainActivity : Activity() {
 
         layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40,40,40,40)
-            setBackgroundColor(Color.WHITE)
-            gravity = Gravity.CENTER_HORIZONTAL
+            setBackgroundColor(Color.parseColor("#F1F3F4"))
         }
 
-        // BIG DASHBOARD CIRCLE
-        circleText = TextView(this).apply {
+        // APP HEADER
+        val title = TextView(this).apply {
+            text = "TrashData"
+            textSize = 28f
+            setPadding(40,70,40,10)
+            setTextColor(Color.parseColor("#202124"))
+        }
 
-            text = "0\nOld Files"
-            textSize = 30f
+        val subtitle = TextView(this).apply {
+            text = "Storage Cleaner"
+            textSize = 16f
+            setPadding(40,0,40,30)
+            setTextColor(Color.GRAY)
+        }
+
+        // DASHBOARD CARD
+        val dashboard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setPadding(40,50,40,50)
+            background = makeCard()
+        }
 
-            val params = LinearLayout.LayoutParams(400,400)
-            params.gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = params
+        val dashParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        dashParams.setMargins(40,0,40,40)
+        dashboard.layoutParams = dashParams
 
-            background = makeCircle()
+        circleText = TextView(this).apply {
+            text = "0"
+            textSize = 42f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#1A73E8"))
+        }
+
+        val label = TextView(this).apply {
+            text = "Old Files"
+            textSize = 18f
+            gravity = Gravity.CENTER
         }
 
         sizeText = TextView(this).apply {
-
             text = "Total Size: 0 MB"
-            textSize = 18f
+            textSize = 16f
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#1565C0"))
-
         }
+
+        dashboard.addView(circleText)
+        dashboard.addView(label)
+        dashboard.addView(sizeText)
 
         counterText = TextView(this).apply {
             text = "Files scanned: 0"
-            textSize = 16f
+            setPadding(40,0,40,20)
         }
 
         progressBar = ProgressBar(this)
         progressBar.visibility = ProgressBar.GONE
 
         val startButton = Button(this).apply {
-            text = "Scan Files"
-            setBackgroundColor(Color.parseColor("#1976D2"))
+            text = "Scan Storage"
+            setBackgroundColor(Color.parseColor("#1A73E8"))
             setTextColor(Color.WHITE)
         }
 
         val stopButton = Button(this).apply {
             text = "Stop Scan"
-            setBackgroundColor(Color.parseColor("#64B5F6"))
-            setTextColor(Color.WHITE)
         }
 
         val deleteAllButton = Button(this).apply {
             text = "Delete All Old Files"
-            setBackgroundColor(Color.parseColor("#E53935"))
-            setTextColor(Color.WHITE)
         }
 
-        layout.addView(circleText)
-        layout.addView(sizeText)
+        layout.addView(title)
+        layout.addView(subtitle)
+        layout.addView(dashboard)
         layout.addView(counterText)
         layout.addView(startButton)
         layout.addView(stopButton)
@@ -134,12 +158,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun makeCircle(): GradientDrawable {
+    // CARD BACKGROUND
+    private fun makeCard(): GradientDrawable {
 
         val shape = GradientDrawable()
-        shape.shape = GradientDrawable.OVAL
-        shape.setColor(Color.parseColor("#1976D2"))
-        shape.setStroke(8, Color.parseColor("#BBDEFB"))
+        shape.cornerRadius = 40f
+        shape.setColor(Color.WHITE)
 
         return shape
     }
@@ -163,7 +187,7 @@ class MainActivity : Activity() {
 
                 progressBar.visibility = ProgressBar.GONE
 
-                circleText.text = "$oldFileCount\nOld Files"
+                circleText.text = "$oldFileCount"
                 sizeText.text = "Total Size: ${oldFileSize / (1024*1024)} MB"
 
             }
@@ -206,7 +230,6 @@ class MainActivity : Activity() {
 
         val path = dir.absolutePath
 
-        // SYSTEM SAFETY
         if (path.contains("/Android")) return
         if (path.contains("/system")) return
         if (path.contains("/data")) return
@@ -254,14 +277,25 @@ class MainActivity : Activity() {
         }
     }
 
+    // FILE CARD ROW
     private fun addFileRow(file: File) {
 
-        val row = LinearLayout(this)
-        row.orientation = LinearLayout.HORIZONTAL
-        row.setPadding(0,10,0,10)
+        val card = LinearLayout(this)
+        card.orientation = LinearLayout.HORIZONTAL
+        card.setPadding(30,25,30,25)
+        card.background = makeCard()
+
+        val params = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        params.setMargins(40,10,40,10)
+        card.layoutParams = params
 
         val name = TextView(this)
         name.text = file.name
+        name.textSize = 16f
 
         name.layoutParams = LinearLayout.LayoutParams(
             0,
@@ -277,16 +311,16 @@ class MainActivity : Activity() {
             if (file.exists()) {
 
                 file.delete()
-                layout.removeView(row)
+                layout.removeView(card)
 
                 Toast.makeText(this,"File deleted",Toast.LENGTH_SHORT).show()
             }
 
         }
 
-        row.addView(name)
-        row.addView(deleteBtn)
+        card.addView(name)
+        card.addView(deleteBtn)
 
-        layout.addView(row)
+        layout.addView(card)
     }
 }
