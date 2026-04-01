@@ -17,11 +17,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Scrollable layout to display file names
         val scrollView = ScrollView(this)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
+
         scrollView.addView(layout)
         setContentView(scrollView)
 
@@ -29,13 +29,18 @@ class MainActivity : Activity() {
             if (!Environment.isExternalStorageManager()) {
                 requestAllFilesPermission()
             } else {
-                // Permission already granted
-                showAllFiles(layout)
+                startScan(layout)
             }
         } else {
-            // Android 10 and below
-            showAllFiles(layout)
+            startScan(layout)
         }
+    }
+
+    private fun startScan(layout: LinearLayout) {
+        Thread {
+            val storageDir = Environment.getExternalStorageDirectory()
+            listFilesRecursive(storageDir, layout, "")
+        }.start()
     }
 
     private fun requestAllFilesPermission() {
@@ -49,21 +54,32 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showAllFiles(layout: LinearLayout) {
-        val storageDir = Environment.getExternalStorageDirectory()
-        listFilesRecursive(storageDir, layout, "")
-    }
-
     private fun listFilesRecursive(dir: File, layout: LinearLayout, indent: String) {
-        val files = dir.listFiles()
-        if (files != null) {
-            for (file in files) {
+
+        val now = System.currentTimeMillis()
+        val fiveMinutes = 5 * 60 * 1000
+        val tenMinutes = 10 * 60 * 1000
+
+        val files = dir.listFiles() ?: return
+
+        for (file in files) {
+
+            val diff = now - file.lastModified()
+
+            val text = when {
+                diff > tenMinutes -> "$indent Older than 10 min: ${file.name}"
+                diff > fiveMinutes -> "$indent Older than 5 min: ${file.name}"
+                else -> "$indent${file.name}"
+            }
+
+            runOnUiThread {
                 val textView = TextView(this)
-                textView.text = "$indent${file.name}"
+                textView.text = text
                 layout.addView(textView)
-                if (file.isDirectory) {
-                    listFilesRecursive(file, layout, "$indent    ")
-                }
+            }
+
+            if (file.isDirectory) {
+                listFilesRecursive(file, layout, "$indent    ")
             }
         }
     }
