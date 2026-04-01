@@ -28,6 +28,11 @@ class MainActivity : Activity() {
     private var oldFileCount = 0
     private var oldFileSize = 0L
 
+    private var largeFileCount = 0
+    private var apkCount = 0
+    private var tempCount = 0
+    private var emptyFolderCount = 0
+
     private val oldFiles = mutableListOf<File>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,7 +45,6 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.parseColor("#F1F3F4"))
         }
 
-        // APP HEADER
         val title = TextView(this).apply {
             text = "TrashData"
             textSize = 28f
@@ -55,7 +59,6 @@ class MainActivity : Activity() {
             setTextColor(Color.GRAY)
         }
 
-        // DASHBOARD CARD
         val dashboard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -124,9 +127,6 @@ class MainActivity : Activity() {
         layout.addView(deleteAllButton)
         layout.addView(progressBar)
 
-        scrollView.addView(layout)
-        setContentView(scrollView)
-
         startButton.setOnClickListener { startScan() }
 
         stopButton.setOnClickListener {
@@ -145,6 +145,60 @@ class MainActivity : Activity() {
             Toast.makeText(this,"Old files deleted",Toast.LENGTH_SHORT).show()
         }
 
+        scrollView.addView(layout)
+
+        // ROOT LAYOUT
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+
+        // BOTTOM NAV BAR
+        val navBar = LinearLayout(this)
+        navBar.orientation = LinearLayout.HORIZONTAL
+        navBar.setBackgroundColor(Color.WHITE)
+        navBar.setPadding(20,20,20,20)
+
+        val cleanerBtn = Button(this)
+        cleanerBtn.text = "Cleaner"
+
+        val storageBtn = Button(this)
+        storageBtn.text = "Storage"
+
+        navBar.addView(
+            cleanerBtn,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f)
+        )
+
+        navBar.addView(
+            storageBtn,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f)
+        )
+
+        root.addView(
+            scrollView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
+
+        root.addView(navBar)
+
+        setContentView(root)
+
+        cleanerBtn.setOnClickListener {
+
+            Toast.makeText(this,"Already on Cleaner",Toast.LENGTH_SHORT).show()
+
+        }
+
+        storageBtn.setOnClickListener {
+
+            val intent = Intent(this, SecondActivity::class.java)
+            startActivity(intent)
+
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
 
             if (!Environment.isExternalStorageManager()) {
@@ -158,13 +212,10 @@ class MainActivity : Activity() {
         }
     }
 
-    // CARD BACKGROUND
     private fun makeCard(): GradientDrawable {
-
         val shape = GradientDrawable()
         shape.cornerRadius = 40f
         shape.setColor(Color.WHITE)
-
         return shape
     }
 
@@ -174,6 +225,12 @@ class MainActivity : Activity() {
         fileCount = 0
         oldFileCount = 0
         oldFileSize = 0
+
+        largeFileCount = 0
+        apkCount = 0
+        tempCount = 0
+        emptyFolderCount = 0
+
         oldFiles.clear()
 
         progressBar.visibility = ProgressBar.VISIBLE
@@ -188,7 +245,15 @@ class MainActivity : Activity() {
                 progressBar.visibility = ProgressBar.GONE
 
                 circleText.text = "$oldFileCount"
-                sizeText.text = "Total Size: ${oldFileSize / (1024*1024)} MB"
+
+                sizeText.text =
+                    """
+Old Files: $oldFileCount
+Large Files: $largeFileCount
+APK Files: $apkCount
+Temp Files: $tempCount
+Empty Folders: $emptyFolderCount
+""".trimIndent()
 
             }
 
@@ -251,6 +316,11 @@ class MainActivity : Activity() {
 
             if (file.isDirectory) {
 
+                val children = file.listFiles()
+                if (children == null || children.isEmpty()) {
+                    emptyFolderCount++
+                }
+
                 listFilesRecursive(file)
 
             } else {
@@ -261,13 +331,26 @@ class MainActivity : Activity() {
 
                     oldFileCount++
                     oldFileSize += file.length()
-
                     oldFiles.add(file)
 
                     runOnUiThread {
                         addFileRow(file)
                     }
+                }
 
+                if (file.length() > 50 * 1024 * 1024) {
+                    largeFileCount++
+                }
+
+                if (file.name.endsWith(".apk")) {
+                    apkCount++
+                }
+
+                if (file.name.endsWith(".tmp") ||
+                    file.name.endsWith(".log") ||
+                    file.name.endsWith(".cache")) {
+
+                    tempCount++
                 }
             }
 
@@ -277,7 +360,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // FILE CARD ROW
     private fun addFileRow(file: File) {
 
         val card = LinearLayout(this)
