@@ -11,6 +11,10 @@ import android.widget.*
 import java.io.File
 import androidx.work.*
 import java.util.concurrent.TimeUnit
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 
 class MainActivity : Activity() {
 
@@ -93,6 +97,8 @@ class MainActivity : Activity() {
             startBackgroundScan()
 
         }
+        requestNotificationPermission()
+        createNotificationChannel()
     }
 
     private fun startScan() {
@@ -111,6 +117,8 @@ class MainActivity : Activity() {
             runOnUiThread {
                 statusText.text = "Status: Scan Complete"
                 progressBar.visibility = ProgressBar.GONE
+
+                showNotification("Scan complete. $fileCount files scanned.")
             }
 
         }.start()
@@ -178,6 +186,42 @@ class MainActivity : Activity() {
             if (file.isDirectory) {
                 listFilesRecursive(file, "$indent    ")
             }
+        }
+    }
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissions(
+                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                101
+            )
+        }
+    }
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "trashdata_channel",
+                "TrashData Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+    private fun showNotification(message: String) {
+
+        val builder = NotificationCompat.Builder(this, "trashdata_channel")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("TrashData Alert")
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        val manager = NotificationManagerCompat.from(this)
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            manager.notify(1, builder.build())
         }
     }
 }
