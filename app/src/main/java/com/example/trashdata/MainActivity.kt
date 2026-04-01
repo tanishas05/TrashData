@@ -23,6 +23,8 @@ class MainActivity : Activity() {
     private lateinit var circleText: TextView
     private lateinit var sizeText: TextView
 
+    private lateinit var pieChart: PieChartView
+
     private var scanning = false
     private var fileCount = 0
     private var oldFileCount = 0
@@ -118,6 +120,10 @@ class MainActivity : Activity() {
             text = "Delete All Old Files"
         }
 
+        val viewFilesButton = Button(this).apply {
+            text = "View Detected Files"
+        }
+
         layout.addView(title)
         layout.addView(subtitle)
         layout.addView(dashboard)
@@ -125,6 +131,7 @@ class MainActivity : Activity() {
         layout.addView(startButton)
         layout.addView(stopButton)
         layout.addView(deleteAllButton)
+        layout.addView(viewFilesButton)
         layout.addView(progressBar)
 
         startButton.setOnClickListener { startScan() }
@@ -136,22 +143,33 @@ class MainActivity : Activity() {
 
         deleteAllButton.setOnClickListener {
 
+            var deleted = 0
+
             for(file in oldFiles){
-                if(file.exists()){
-                    file.delete()
+                if(file.exists() && file.delete()){
+                    deleted++
                 }
             }
 
-            Toast.makeText(this,"Old files deleted",Toast.LENGTH_SHORT).show()
+            Toast.makeText(this,"Deleted $deleted files",Toast.LENGTH_SHORT).show()
+
+            oldFiles.clear()
+            oldFileCount = 0
+            circleText.text = "0"
+        }
+
+        viewFilesButton.setOnClickListener {
+
+            val intent = Intent(this, SecondActivity::class.java)
+            startActivity(intent)
+
         }
 
         scrollView.addView(layout)
 
-        // ROOT LAYOUT
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
 
-        // BOTTOM NAV BAR
         val navBar = LinearLayout(this)
         navBar.orientation = LinearLayout.HORIZONTAL
         navBar.setBackgroundColor(Color.WHITE)
@@ -246,6 +264,8 @@ class MainActivity : Activity() {
 
                 circleText.text = "$oldFileCount"
 
+                val sizeMB = oldFileSize / (1024 * 1024)
+
                 sizeText.text =
                     """
 Old Files: $oldFileCount
@@ -253,6 +273,7 @@ Large Files: $largeFileCount
 APK Files: $apkCount
 Temp Files: $tempCount
 Empty Folders: $emptyFolderCount
+Total Size: ${sizeMB} MB
 """.trimIndent()
 
             }
@@ -338,13 +359,8 @@ Empty Folders: $emptyFolderCount
                     }
                 }
 
-                if (file.length() > 50 * 1024 * 1024) {
-                    largeFileCount++
-                }
-
-                if (file.name.endsWith(".apk")) {
-                    apkCount++
-                }
+                if (file.length() > 50 * 1024 * 1024) largeFileCount++
+                if (file.name.endsWith(".apk")) apkCount++
 
                 if (file.name.endsWith(".tmp") ||
                     file.name.endsWith(".log") ||
@@ -390,11 +406,9 @@ Empty Folders: $emptyFolderCount
 
         deleteBtn.setOnClickListener {
 
-            if (file.exists()) {
+            if (file.exists() && file.delete()) {
 
-                file.delete()
                 layout.removeView(card)
-
                 Toast.makeText(this,"File deleted",Toast.LENGTH_SHORT).show()
             }
 

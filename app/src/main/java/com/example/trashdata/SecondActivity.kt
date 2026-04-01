@@ -9,12 +9,16 @@ import android.view.View
 import android.view.ViewGroup
 import java.io.File
 import android.content.Intent
+import android.text.Editable
+import android.text.TextWatcher
 
 class SecondActivity : Activity() {
 
     private lateinit var listView: ListView
     private lateinit var filterSpinner: Spinner
     private lateinit var deleteSelectedBtn: Button
+    private lateinit var searchBar: EditText
+    private lateinit var fileCount: TextView
 
     private val allFiles = mutableListOf<File>()
     private val displayFiles = mutableListOf<File>()
@@ -31,6 +35,12 @@ class SecondActivity : Activity() {
         val title = TextView(this)
         title.text = "Detected Files"
         title.textSize = 24f
+
+        fileCount = TextView(this)
+        fileCount.text = "Scanning files..."
+
+        searchBar = EditText(this)
+        searchBar.hint = "Search files..."
 
         filterSpinner = Spinner(this)
 
@@ -56,14 +66,17 @@ class SecondActivity : Activity() {
         listView = ListView(this)
 
         layout.addView(title)
+        layout.addView(fileCount)
+        layout.addView(searchBar)
         layout.addView(filterSpinner)
         layout.addView(deleteSelectedBtn)
         layout.addView(listView)
 
-        // ---------- BOTTOM NAVIGATION ----------
+        // -------- ROOT LAYOUT --------
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
 
+        // -------- BOTTOM NAV --------
         val navBar = LinearLayout(this)
         navBar.orientation = LinearLayout.HORIZONTAL
         navBar.setBackgroundColor(Color.parseColor("#EEEEEE"))
@@ -97,10 +110,11 @@ class SecondActivity : Activity() {
         root.addView(navBar)
 
         setContentView(root)
-        // --------------------------------------
 
+        // -------- START SCAN --------
         scanFiles()
 
+        // -------- FILTER --------
         filterSpinner.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
 
@@ -116,6 +130,25 @@ class SecondActivity : Activity() {
                 override fun onNothingSelected(parent: AdapterView<*>) {}
             }
 
+        // -------- SEARCH --------
+        searchBar.addTextChangedListener(object : TextWatcher {
+
+            override fun afterTextChanged(s: Editable?) {
+
+                val query = s.toString().lowercase()
+
+                val filtered = displayFiles.filter {
+                    it.name.lowercase().contains(query)
+                }
+
+                showFiles(filtered)
+            }
+
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        // -------- DELETE SELECTED --------
         deleteSelectedBtn.setOnClickListener {
 
             for(file in selectedFiles){
@@ -130,16 +163,14 @@ class SecondActivity : Activity() {
             applyFilter(filterSpinner.selectedItem.toString())
         }
 
-        // ---------- NAVIGATION ACTIONS ----------
+        // -------- NAVIGATION --------
         cleanerBtn.setOnClickListener {
-            val intent = Intent(this, MainActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, MainActivity::class.java))
         }
 
         filesBtn.setOnClickListener {
             Toast.makeText(this,"Already on Files screen",Toast.LENGTH_SHORT).show()
         }
-        // ---------------------------------------
     }
 
     private fun scanFiles() {
@@ -215,26 +246,30 @@ class SecondActivity : Activity() {
 
         displayFiles.sortByDescending { it.length() }
 
-        showFiles()
+        fileCount.text = "${displayFiles.size} files detected"
+
+        showFiles(displayFiles)
     }
 
-    private fun showFiles(){
+    private fun showFiles(files: List<File>){
 
         val adapter = object : BaseAdapter() {
 
-            override fun getCount(): Int = displayFiles.size
-
-            override fun getItem(position: Int): Any = displayFiles[position]
-
+            override fun getCount(): Int = files.size
+            override fun getItem(position: Int): Any = files[position]
             override fun getItemId(position: Int): Long = position.toLong()
 
             override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
 
-                val file = displayFiles[position]
+                val file = files[position]
 
                 val row = LinearLayout(this@SecondActivity)
                 row.orientation = LinearLayout.HORIZONTAL
                 row.setPadding(20,20,20,20)
+
+                if(selectedFiles.contains(file)){
+                    row.setBackgroundColor(Color.parseColor("#EEEEFF"))
+                }
 
                 val checkBox = CheckBox(this@SecondActivity)
 
@@ -252,7 +287,7 @@ class SecondActivity : Activity() {
                 icon.textSize = 20f
 
                 val name = TextView(this@SecondActivity)
-                name.text = "${file.name} (${file.length()/1024} KB)"
+                name.text = "${file.name} (${formatSize(file.length())})"
                 name.layoutParams = LinearLayout.LayoutParams(
                     0,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -282,6 +317,19 @@ class SecondActivity : Activity() {
         }
 
         listView.adapter = adapter
+    }
+
+    private fun formatSize(size:Long):String{
+
+        val kb = size / 1024
+        val mb = kb / 1024
+        val gb = mb / 1024
+
+        return when{
+            gb > 0 -> "$gb GB"
+            mb > 0 -> "$mb MB"
+            else -> "$kb KB"
+        }
     }
 
     private fun getFileIcon(file:File):String{
