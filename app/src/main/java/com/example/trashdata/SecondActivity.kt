@@ -7,6 +7,8 @@ import android.widget.*
 import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
 import java.io.File
 import android.content.Intent
 import android.text.Editable
@@ -27,21 +29,45 @@ class SecondActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.setPadding(30,70,30,30)
-        layout.setBackgroundColor(Color.WHITE)
+        // 🔵 ROOT
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setBackgroundColor(Color.parseColor("#F5F7FA"))
+
+        // 🔵 HEADER
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.VERTICAL
+        header.setBackgroundColor(Color.parseColor("#2F80ED"))
+        header.setPadding(30, 80, 30, 40)
 
         val title = TextView(this)
-        title.text = "Detected Files"
-        title.textSize = 24f
+        title.text = "Files Cleaner"
+        title.setTextColor(Color.WHITE)
+        title.textSize = 22f
 
         fileCount = TextView(this)
-        fileCount.text = "Scanning files..."
+        fileCount.text = "Scanning..."
+        fileCount.setTextColor(Color.WHITE)
 
+        header.addView(title)
+        header.addView(fileCount)
+
+        // ⚪ CONTENT
+        val container = LinearLayout(this)
+        container.orientation = LinearLayout.VERTICAL
+        container.setPadding(20, 20, 20, 20)
+
+        // 🔍 SEARCH BAR
         searchBar = EditText(this)
         searchBar.hint = "Search files..."
 
+        val searchBg = GradientDrawable()
+        searchBg.cornerRadius = 50f
+        searchBg.setColor(Color.WHITE)
+        searchBar.background = searchBg
+        searchBar.setPadding(30,20,30,20)
+
+        // 🔽 FILTER
         filterSpinner = Spinner(this)
 
         val filters = arrayOf(
@@ -57,30 +83,26 @@ class SecondActivity : Activity() {
             android.R.layout.simple_spinner_dropdown_item,
             filters
         )
-
         filterSpinner.adapter = spinnerAdapter
 
+        // 🔴 DELETE BUTTON
         deleteSelectedBtn = Button(this)
         deleteSelectedBtn.text = "Delete Selected"
+        deleteSelectedBtn.setBackgroundColor(Color.parseColor("#FF5252"))
+        deleteSelectedBtn.setTextColor(Color.WHITE)
 
+        // 📄 LIST
         listView = ListView(this)
 
-        layout.addView(title)
-        layout.addView(fileCount)
-        layout.addView(searchBar)
-        layout.addView(filterSpinner)
-        layout.addView(deleteSelectedBtn)
-        layout.addView(listView)
+        container.addView(searchBar)
+        container.addView(filterSpinner)
+        container.addView(deleteSelectedBtn)
+        container.addView(listView)
 
-        // -------- ROOT LAYOUT --------
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-
-        // -------- BOTTOM NAV --------
+        // 🔻 NAV BAR
         val navBar = LinearLayout(this)
         navBar.orientation = LinearLayout.HORIZONTAL
-        navBar.setBackgroundColor(Color.parseColor("#EEEEEE"))
-        navBar.setPadding(20,20,20,20)
+        navBar.setBackgroundColor(Color.WHITE)
 
         val cleanerBtn = Button(this)
         cleanerBtn.text = "Cleaner"
@@ -88,133 +110,88 @@ class SecondActivity : Activity() {
         val filesBtn = Button(this)
         filesBtn.text = "Files"
 
-        val filterFromDashboard = intent.getStringExtra("filter")
+        navBar.addView(cleanerBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f))
+        navBar.addView(filesBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f))
 
-        if (filterFromDashboard != null) {
-            applyFilter(filterFromDashboard)
-        }
+        root.addView(header)
+        root.addView(container, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        root.addView(navBar)
 
+        setContentView(root)
+
+        // 🔥 START SCAN
+        scanFiles()
+
+        // 🎯 FILTER FROM DASHBOARD
         val filter = intent.getStringExtra("filter")
         if (filter != null) {
             applyFilter(filter)
         }
 
-        navBar.addView(
-            cleanerBtn,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f)
-        )
-
-        navBar.addView(
-            filesBtn,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f)
-        )
-
-        root.addView(
-            layout,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        )
-
-        root.addView(navBar)
-
-        setContentView(root)
-
-        // -------- START SCAN --------
-        scanFiles()
-
-        // -------- FILTER --------
+        // FILTER CHANGE
         filterSpinner.onItemSelectedListener =
             object : AdapterView.OnItemSelectedListener {
-
-                override fun onItemSelected(
-                    parent: AdapterView<*>,
-                    view: View?,
-                    position: Int,
-                    id: Long
-                ) {
+                override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
                     applyFilter(filters[position])
                 }
-
                 override fun onNothingSelected(parent: AdapterView<*>) {}
             }
 
-        // -------- SEARCH --------
+        // SEARCH
         searchBar.addTextChangedListener(object : TextWatcher {
-
             override fun afterTextChanged(s: Editable?) {
-
                 val query = s.toString().lowercase()
-
                 val filtered = displayFiles.filter {
                     it.name.lowercase().contains(query)
                 }
-
                 showFiles(filtered)
             }
-
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
-        // -------- DELETE SELECTED --------
+        // DELETE SELECTED
         deleteSelectedBtn.setOnClickListener {
-
             for(file in selectedFiles){
                 if(file.exists()){
                     file.delete()
                 }
             }
-
-            Toast.makeText(this,"Selected files deleted",Toast.LENGTH_SHORT).show()
-
+            Toast.makeText(this,"Deleted selected files",Toast.LENGTH_SHORT).show()
             selectedFiles.clear()
             applyFilter(filterSpinner.selectedItem.toString())
         }
 
-        // -------- NAVIGATION --------
         cleanerBtn.setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))
-        }
-
-        filesBtn.setOnClickListener {
-            Toast.makeText(this,"Already on Files screen",Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun scanFiles() {
-
         Thread {
-
             val root = Environment.getExternalStorageDirectory()
             scanRecursive(root)
 
             runOnUiThread {
                 applyFilter("All Files")
             }
-
         }.start()
     }
 
     private fun scanRecursive(dir: File) {
-
         val path = dir.absolutePath
-
         if (path.contains("/Android")) return
-        if (path.contains("/system")) return
 
         val files = dir.listFiles() ?: return
 
         for(file in files){
-
             if(file.isDirectory){
                 scanRecursive(file)
             } else {
                 allFiles.add(file)
             }
-
         }
     }
 
@@ -257,7 +234,7 @@ class SecondActivity : Activity() {
 
         displayFiles.sortByDescending { it.length() }
 
-        fileCount.text = "${displayFiles.size} files detected"
+        fileCount.text = "${displayFiles.size} files found"
 
         showFiles(displayFiles)
     }
@@ -274,56 +251,46 @@ class SecondActivity : Activity() {
 
                 val file = files[position]
 
-                val row = LinearLayout(this@SecondActivity)
-                row.orientation = LinearLayout.HORIZONTAL
-                row.setPadding(20,20,20,20)
+                val card = LinearLayout(this@SecondActivity)
+                card.orientation = LinearLayout.HORIZONTAL
+                card.setPadding(20,20,20,20)
 
-                if(selectedFiles.contains(file)){
-                    row.setBackgroundColor(Color.parseColor("#EEEEFF"))
-                }
+                val bg = GradientDrawable()
+                bg.cornerRadius = 25f
+                bg.setColor(Color.WHITE)
+                card.background = bg
 
                 val checkBox = CheckBox(this@SecondActivity)
 
                 checkBox.setOnCheckedChangeListener { _, isChecked ->
-
-                    if(isChecked){
-                        selectedFiles.add(file)
-                    } else {
-                        selectedFiles.remove(file)
-                    }
+                    if(isChecked) selectedFiles.add(file)
+                    else selectedFiles.remove(file)
                 }
 
                 val icon = TextView(this@SecondActivity)
                 icon.text = getFileIcon(file)
-                icon.textSize = 20f
+                icon.textSize = 22f
 
                 val name = TextView(this@SecondActivity)
-                name.text = "${file.name} (${formatSize(file.length())})"
-                name.layoutParams = LinearLayout.LayoutParams(
-                    0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    1f
-                )
+                name.text = "${file.name}\n${formatSize(file.length())}"
+                name.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f)
 
                 val deleteBtn = Button(this@SecondActivity)
                 deleteBtn.text = "Delete"
 
                 deleteBtn.setOnClickListener {
-
                     if(file.exists()){
                         file.delete()
-                        Toast.makeText(this@SecondActivity,"Deleted ${file.name}",Toast.LENGTH_SHORT).show()
                         applyFilter(filterSpinner.selectedItem.toString())
                     }
-
                 }
 
-                row.addView(checkBox)
-                row.addView(icon)
-                row.addView(name)
-                row.addView(deleteBtn)
+                card.addView(checkBox)
+                card.addView(icon)
+                card.addView(name)
+                card.addView(deleteBtn)
 
-                return row
+                return card
             }
         }
 
@@ -331,7 +298,6 @@ class SecondActivity : Activity() {
     }
 
     private fun formatSize(size:Long):String{
-
         val kb = size / 1024
         val mb = kb / 1024
         val gb = mb / 1024
@@ -344,11 +310,9 @@ class SecondActivity : Activity() {
     }
 
     private fun getFileIcon(file:File):String{
-
         val name = file.name.lowercase()
 
         return when {
-
             name.endsWith(".jpg") || name.endsWith(".png") -> "🖼"
             name.endsWith(".mp4") || name.endsWith(".mkv") -> "🎬"
             name.endsWith(".mp3") -> "🎵"
@@ -356,7 +320,6 @@ class SecondActivity : Activity() {
             name.endsWith(".zip") -> "🗜"
             name.endsWith(".pdf") -> "📄"
             else -> "📁"
-
         }
     }
 }
