@@ -8,6 +8,10 @@ import android.provider.Settings
 import android.content.Intent
 import android.net.Uri
 import android.widget.*
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
 import java.io.File
 import androidx.work.*
 import java.util.concurrent.TimeUnit
@@ -18,7 +22,6 @@ import androidx.core.app.NotificationManagerCompat
 
 class MainActivity : Activity() {
 
-    private lateinit var layout: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var counterText: TextView
     private lateinit var progressBar: ProgressBar
@@ -29,12 +32,53 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val scrollView = ScrollView(this)
+        // 🔵 ROOT
+        val root = LinearLayout(this)
+        root.orientation = LinearLayout.VERTICAL
+        root.setBackgroundColor(Color.WHITE)
 
-        layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(30,30,30,30)
-        }
+        // 🔵 HEADER
+        val header = LinearLayout(this)
+        header.orientation = LinearLayout.VERTICAL
+        header.setBackgroundColor(Color.parseColor("#2F80ED"))
+        header.setPadding(40, 100, 40, 100)
+        header.gravity = Gravity.CENTER
+
+        val title = TextView(this)
+        title.text = "TrashData Cleaner"
+        title.setTextColor(Color.WHITE)
+        title.textSize = 22f
+        title.setTypeface(null, Typeface.BOLD)
+
+        val subtitle = TextView(this)
+        subtitle.text = "Junk Files"
+        subtitle.setTextColor(Color.WHITE)
+
+        // ⭕ CLEAN BUTTON
+        val cleanBtn = TextView(this)
+        cleanBtn.text = "CLEAN"
+        cleanBtn.gravity = Gravity.CENTER
+        cleanBtn.setTextColor(Color.WHITE)
+        cleanBtn.textSize = 18f
+
+        val shape = GradientDrawable()
+        shape.shape = GradientDrawable.OVAL
+        shape.setColor(Color.parseColor("#4DA3FF"))
+        cleanBtn.background = shape
+
+        val size = 300
+        val params = LinearLayout.LayoutParams(size, size)
+        params.setMargins(0, 40, 0, 0)
+        cleanBtn.layoutParams = params
+
+        header.addView(title)
+        header.addView(subtitle)
+        header.addView(cleanBtn)
+
+        // ⚪ CONTENT CARD
+        val container = LinearLayout(this)
+        container.orientation = LinearLayout.VERTICAL
+        container.setPadding(30, 30, 30, 30)
 
         statusText = TextView(this)
         statusText.text = "Status: Idle"
@@ -45,94 +89,155 @@ class MainActivity : Activity() {
         progressBar = ProgressBar(this)
         progressBar.visibility = ProgressBar.GONE
 
-        val startButton = Button(this)
-        startButton.text = "Start Scan"
+        // 🔲 GRID
+        val grid = GridLayout(this)
+        grid.columnCount = 2
 
-        val stopButton = Button(this)
-        stopButton.text = "Stop Scan"
+        val gridParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        grid.layoutParams = gridParams
 
-        val clearButton = Button(this)
-        clearButton.text = "Clear Results"
+        grid.alignmentMode = GridLayout.ALIGN_MARGINS
+        grid.useDefaultMargins = true
 
-        val openFilesBtn = Button(this)
-        openFilesBtn.text = "Open Files Cleaner"
+        fun createItem(icon: String, text: String, action: () -> Unit): LinearLayout {
 
+            val box = LinearLayout(this)
+            box.orientation = LinearLayout.VERTICAL
+            box.gravity = Gravity.CENTER
+            box.setPadding(40, 40, 40, 40)
 
-        layout.addView(statusText)
-        layout.addView(counterText)
-        layout.addView(startButton)
-        layout.addView(stopButton)
-        layout.addView(clearButton)
-        layout.addView(progressBar)
-        layout.addView(openFilesBtn)
+            val params = GridLayout.LayoutParams()
+            params.width = 0
+            params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            box.layoutParams = params
 
-        scrollView.addView(layout)
-        setContentView(scrollView)
+            val iconView = TextView(this)
+            iconView.text = icon
+            iconView.textSize = 36f
+            iconView.gravity = Gravity.CENTER
 
-        startButton.setOnClickListener {
+            val label = TextView(this)
+            label.text = text
+            label.gravity = Gravity.CENTER
+
+            box.addView(iconView)
+            box.addView(label)
+
+            box.setOnClickListener { action() }
+
+            return box
+        }
+
+        grid.addView(createItem("🗂", "Old Files") {
+            startActivity(Intent(this, SecondActivity::class.java).putExtra("filter","Old Files"))
+        })
+
+        grid.addView(createItem("📦", "Large Files") {
+            startActivity(Intent(this, SecondActivity::class.java).putExtra("filter","Large Files"))
+        })
+
+        grid.addView(createItem("🧹", "Duplicate Files") {
+            startActivity(Intent(this, SecondActivity::class.java))
+        })
+
+        grid.addView(createItem("📁", "Files") {
+            startActivity(Intent(this, SecondActivity::class.java))
+        })
+
+        // ➕ ADD ALL
+        container.addView(statusText)
+        container.addView(counterText)
+        container.addView(progressBar)
+        container.addView(grid)
+
+        // 🔻 BOTTOM NAV
+        val nav = LinearLayout(this)
+        nav.orientation = LinearLayout.HORIZONTAL
+        nav.setBackgroundColor(Color.parseColor("#EEEEEE"))
+
+        val cleanerBtn = Button(this)
+        cleanerBtn.text = "Cleaner"
+
+        val filesBtn = Button(this)
+        filesBtn.text = "Files"
+
+        nav.addView(cleanerBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        nav.addView(filesBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+        filesBtn.setOnClickListener {
+            startActivity(Intent(this, SecondActivity::class.java))
+        }
+
+        // 🔗 ROOT ADD
+        root.addView(header)
+        root.addView(container, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+        root.addView(nav)
+
+        setContentView(root)
+
+        // 🔥 CLEAN BUTTON ACTION
+        cleanBtn.setOnClickListener {
             startScan()
         }
 
-        stopButton.setOnClickListener {
-            scanning = false
-            statusText.text = "Status: Stopped"
-            progressBar.visibility = ProgressBar.GONE
-        }
-
-        clearButton.setOnClickListener {
-            if (layout.childCount > 6) {
-                layout.removeViews(6, layout.childCount - 6)
-            }
-        }
-
-        openFilesBtn.setOnClickListener {
-            val intent = Intent(this, SecondActivity::class.java)
-            startActivity(intent)
-        }
-
-
+        // 🔧 PERMISSIONS
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-
             if (!Environment.isExternalStorageManager()) {
-
                 requestAllFilesPermission()
-
             } else {
-
                 startBackgroundScan()
-
             }
-
         } else {
-
             startBackgroundScan()
-
         }
+
         requestNotificationPermission()
         createNotificationChannel()
     }
 
     private fun startScan() {
-
         scanning = true
         fileCount = 0
 
-        statusText.text = "Status: Scanning..."
+        statusText.text = "Scanning..."
         progressBar.visibility = ProgressBar.VISIBLE
 
         Thread {
-
             val storageDir = Environment.getExternalStorageDirectory()
-            listFilesRecursive(storageDir, "")
+            listFilesRecursive(storageDir)
 
             runOnUiThread {
-                statusText.text = "Status: Scan Complete"
+                statusText.text = "Scan Complete"
                 progressBar.visibility = ProgressBar.GONE
-
                 showNotification("Scan complete. $fileCount files scanned.")
             }
-
         }.start()
+    }
+
+    private fun listFilesRecursive(dir: File) {
+        if (!scanning) return
+        if (dir.absolutePath.contains("/Android/")) return
+
+        val files = dir.listFiles() ?: return
+
+        for (file in files) {
+            if (!scanning) return
+
+            fileCount++
+
+            runOnUiThread {
+                counterText.text = "Files scanned: $fileCount"
+            }
+
+            if (file.isDirectory) {
+                listFilesRecursive(file)
+            }
+        }
     }
 
     private fun requestAllFilesPermission() {
@@ -147,7 +252,6 @@ class MainActivity : Activity() {
     }
 
     private fun startBackgroundScan() {
-
         val workRequest =
             PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES)
                 .build()
@@ -159,45 +263,6 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun listFilesRecursive(dir: File, indent: String) {
-
-        if (!scanning) return
-        if (dir.absolutePath.contains("/Android/")) return
-
-        val now = System.currentTimeMillis()
-        val fiveMinutes = 5 * 60 * 1000
-        val tenMinutes = 10 * 60 * 1000
-
-        val files = dir.listFiles() ?: return
-
-        for (file in files) {
-
-            if (!scanning) return
-
-            fileCount++
-
-            val diff = now - file.lastModified()
-
-            val text = when {
-                diff > tenMinutes -> "$indent Older than 10 min: ${file.name}"
-                diff > fiveMinutes -> "$indent Older than 5 min: ${file.name}"
-                else -> "$indent${file.name}"
-            }
-
-            runOnUiThread {
-                counterText.text = "Files scanned: $fileCount"
-
-                val textView = TextView(this)
-                textView.text = text
-                layout.addView(textView)
-
-            }
-
-            if (file.isDirectory) {
-                listFilesRecursive(file, "$indent    ")
-            }
-        }
-    }
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissions(
@@ -206,6 +271,7 @@ class MainActivity : Activity() {
             )
         }
     }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -218,8 +284,8 @@ class MainActivity : Activity() {
             manager.createNotificationChannel(channel)
         }
     }
-    private fun showNotification(message: String) {
 
+    private fun showNotification(message: String) {
         val builder = NotificationCompat.Builder(this, "trashdata_channel")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("TrashData Alert")
@@ -229,7 +295,8 @@ class MainActivity : Activity() {
         val manager = NotificationManagerCompat.from(this)
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
             manager.notify(1, builder.build())
         }

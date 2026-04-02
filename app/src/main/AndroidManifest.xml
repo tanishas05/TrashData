@@ -33,6 +33,8 @@
             android:name=".SecondActivity"
             android:exported="false"/>
 
+        <activity android:name=".DashboardActivity"/>
+
     </application>
 
 </manifest>

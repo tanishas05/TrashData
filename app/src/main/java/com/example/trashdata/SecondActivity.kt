@@ -88,6 +88,17 @@ class SecondActivity : Activity() {
         val filesBtn = Button(this)
         filesBtn.text = "Files"
 
+        val filterFromDashboard = intent.getStringExtra("filter")
+
+        if (filterFromDashboard != null) {
+            applyFilter(filterFromDashboard)
+        }
+
+        val filter = intent.getStringExtra("filter")
+        if (filter != null) {
+            applyFilter(filter)
+        }
+
         navBar.addView(
             cleanerBtn,
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f)
