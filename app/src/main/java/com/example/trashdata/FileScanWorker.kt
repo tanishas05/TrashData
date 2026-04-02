@@ -8,6 +8,7 @@ import java.io.File
 
 class FileScanWorker(context: Context, params: WorkerParameters) :
     Worker(context, params) {
+    private val appStartTime = System.currentTimeMillis()
 
     override fun doWork(): Result {
 
@@ -21,7 +22,6 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
 
         val now = System.currentTimeMillis()
         val fiveMinutes = 5 * 60 * 1000
-        val tenMinutes = 10 * 60 * 1000
 
         val files = dir.listFiles() ?: return
 
@@ -29,10 +29,11 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
 
             val diff = now - file.lastModified()
 
-            if (diff > tenMinutes) {
+            if (file.lastModified() > appStartTime && diff > fiveMinutes) {
+                // Notify for all files older than 5 minutes
                 NotificationHelper.showNotification(
                     applicationContext,
-                    "File older than 10 minutes",
+                    "Old file detected",
                     file.absolutePath
                 )
             }
