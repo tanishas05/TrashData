@@ -16,6 +16,7 @@ import android.app.NotificationManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
+
 class MainActivity : Activity() {
 
     private lateinit var layout: LinearLayout
@@ -99,6 +100,16 @@ class MainActivity : Activity() {
         }
         requestNotificationPermission()
         createNotificationChannel()
+        // ---- ADD THIS RIGHT HERE ----
+        val workRequest = PeriodicWorkRequestBuilder<FileScanWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "trashdata_5min_scan",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
+// -----------------------------
     }
 
     private fun startScan() {
