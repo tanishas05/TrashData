@@ -54,12 +54,17 @@ class MainActivity : Activity() {
         val clearButton = Button(this)
         clearButton.text = "Clear Results"
 
+        val openFilesBtn = Button(this)
+        openFilesBtn.text = "Open Files Cleaner"
+
+
         layout.addView(statusText)
         layout.addView(counterText)
         layout.addView(startButton)
         layout.addView(stopButton)
         layout.addView(clearButton)
         layout.addView(progressBar)
+        layout.addView(openFilesBtn)
 
         scrollView.addView(layout)
         setContentView(scrollView)
@@ -79,6 +84,12 @@ class MainActivity : Activity() {
                 layout.removeViews(6, layout.childCount - 6)
             }
         }
+
+        openFilesBtn.setOnClickListener {
+            val intent = Intent(this, SecondActivity::class.java)
+            startActivity(intent)
+        }
+
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
 
@@ -174,7 +185,6 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
-
                 counterText.text = "Files scanned: $fileCount"
 
                 val textView = TextView(this)
