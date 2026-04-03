@@ -11,6 +11,8 @@ import java.io.FileInputStream
 import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
+import android.widget.Toast
+import android.os.Handler
 
 class FileScanWorker(context: Context, params: WorkerParameters) :
     Worker(context, params) {
@@ -38,7 +40,7 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         try {
             val root = Environment.getExternalStorageDirectory()
             scanDirectoryIterative(root)
-            detectDuplicates(root)  // ✅ Duplicate detection added
+            detectDuplicates(root)
 
             NotificationHelper.showSummaryNotification(
                 applicationContext,
@@ -63,7 +65,14 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
 
         while (queue.isNotEmpty() && !cancelScan.get()) {
             val dir = queue.removeFirst()
-            val files = dir.listFiles() ?: continue
+            if (dir.absolutePath.contains("/Android/")) continue
+
+            val files = try {
+                dir.listFiles()
+            } catch (e: SecurityException) {
+                sendToast("Cannot access ${dir.path}")
+                continue
+            } ?: continue
 
             for (file in files) {
                 if (cancelScan.get()) return
@@ -105,7 +114,12 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
 
         while (queue.isNotEmpty() && !cancelScan.get()) {
             val dir = queue.removeFirst()
-            val files = dir.listFiles() ?: continue
+
+            val files = try {
+                dir.listFiles()
+            } catch (e: SecurityException) {
+                continue
+            } ?: continue
 
             for (file in files) {
                 if (cancelScan.get()) return
@@ -131,7 +145,15 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
             }
         }
 
-        // TODO: Do something with duplicates (hashMap entries with size>1)
+        // Example: safe deletion of duplicates (optional)
+        for ((hash, files) in hashMap) {
+            if (files.size > 1) {
+                // Keep first file, delete others
+                for (i in 1 until files.size) {
+                    safeDelete(files[i])
+                }
+            }
+        }
     }
 
     // =================== SAFE MD5 HASH ===================
@@ -151,8 +173,27 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         }
     }
 
+    // =================== SAFE FILE DELETE ===================
+    private fun safeDelete(file: File) {
+        try {
+            val deleted = file.delete()
+            if (!deleted) {
+                sendToast("Failed to delete ${file.name}")
+            }
+        } catch (e: SecurityException) {
+            sendToast("Cannot delete ${file.name}")
+        }
+    }
+
     // =================== CANCEL SCAN ===================
     fun stopScan() {
         cancelScan.set(true)
+    }
+
+    // =================== TOAST HELPER ===================
+    private fun sendToast(message: String) {
+        Handler(applicationContext.mainLooper).post {
+            Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
+        }
     }
 }

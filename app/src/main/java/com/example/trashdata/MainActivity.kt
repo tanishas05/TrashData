@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -57,9 +58,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 🔵 ROOT
         drawerLayout = DrawerLayout(this)
-
 
         // ================= HEADER =================
         val header = LinearLayout(this).apply {
@@ -116,6 +115,7 @@ class MainActivity : Activity() {
                 scanning = false
                 statusText.text = "Scan canceled"
                 progressBar.visibility = ProgressBar.GONE
+                Toast.makeText(this@MainActivity, "Scan canceled", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -169,14 +169,23 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER
                 })
 
-                setOnClickListener { action() }
+                setOnClickListener {
+                    try { action() }
+                    catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, "Action failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
 
         fun openFilesActivity(filter: String) {
             val intent = Intent(this, SecondActivity::class.java)
             intent.putExtra("filter", filter)
-            startActivity(intent)
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Cannot open file list: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
 
         grid.addView(createItem("🗂", "Old Files") { openFilesActivity("Old Files") })
@@ -185,7 +194,6 @@ class MainActivity : Activity() {
         grid.addView(createItem("📁", "All Files") { openFilesActivity("All Files") })
 
         container.addView(grid)
-
 
         // ================= MAIN CONTENT =================
         val mainContent = LinearLayout(this).apply {
@@ -271,10 +279,8 @@ class MainActivity : Activity() {
         fileCount = 0
         FileScanWorkerFlags.cancelScan.set(false)
 
-
         statusText.text = "Scanning..."
         progressBar.visibility = ProgressBar.VISIBLE
-
 
         Thread {
             val storageDir = Environment.getExternalStorageDirectory()
@@ -282,10 +288,10 @@ class MainActivity : Activity() {
                 runOnUiThread { counterText.text = "Files scanned: $scannedFiles" }
             }
 
-
             runOnUiThread {
                 if (!FileScanWorkerFlags.cancelScan.get()) {
                     statusText.text = "Scan Complete"
+                    Toast.makeText(this, "Scan complete: $fileCount files", Toast.LENGTH_SHORT).show()
                     showNotification("Scan complete. $fileCount files scanned.")
                 }
                 progressBar.visibility = ProgressBar.GONE
@@ -293,34 +299,33 @@ class MainActivity : Activity() {
         }.start()
     }
 
-
     private fun scanIterative(root: File, onProgress: (Int) -> Unit) {
         val queue = ArrayDeque<File>()
         queue.add(root)
         val now = System.currentTimeMillis()
         val fiveMinutes = 5 * 60 * 1000
 
-
         while (queue.isNotEmpty() && !FileScanWorkerFlags.cancelScan.get()) {
             val dir = queue.removeFirst()
-            val files = dir.listFiles() ?: continue
-
+            val files = try {
+                dir.listFiles()
+            } catch (e: SecurityException) {
+                runOnUiThread { Toast.makeText(this, "Cannot access ${dir.path}", Toast.LENGTH_SHORT).show() }
+                continue
+            } ?: continue
 
             for (file in files) {
                 if (FileScanWorkerFlags.cancelScan.get()) return
 
-
                 if (file.isFile && now - file.lastModified() > fiveMinutes && isRelevant(file)) {
                     fileCount++
                 }
-
 
                 if (file.isDirectory) queue.add(file)
             }
             onProgress(fileCount)
         }
     }
-
 
     private fun isRelevant(file: File): Boolean {
         val path = file.absolutePath.lowercase()
@@ -331,22 +336,7 @@ class MainActivity : Activity() {
                 file.length() > minSize
     }
 
-
-    // =================== BACKGROUND SCAN ===================
-    private fun startBackgroundScan() {
-        val workRequest =
-            PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES)
-                .build()
-
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "trashdata_scan",
-            ExistingPeriodicWorkPolicy.KEEP,
-            workRequest
-        )
-    }
-
-    // =================== PERMISSIONS & NOTIFICATIONS ===================
+    // =================== PERMISSIONS ===================
     private fun requestAllFilesPermission() {
         try {
             val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
@@ -364,6 +354,17 @@ class MainActivity : Activity() {
                 arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
                 101
             )
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startBackgroundScan()
+            } else {
+                Toast.makeText(this, "Storage access denied. Cannot scan files.", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -386,13 +387,11 @@ class MainActivity : Activity() {
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
 
-
         val manager = NotificationManagerCompat.from(this)
-
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
-            android.content.pm.PackageManager.PERMISSION_GRANTED
+            PackageManager.PERMISSION_GRANTED
         ) {
             manager.notify(1, builder.build())
         }
@@ -400,7 +399,17 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Unregister broadcast receiver
         LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)
+    }
+
+    private fun startBackgroundScan() {
+        val workRequest =
+            PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES)
+                .build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "trashdata_scan",
+            ExistingPeriodicWorkPolicy.KEEP,
+            workRequest
+        )
     }
 }
