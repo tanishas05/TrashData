@@ -5,11 +5,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import android.content.Intent
-import android.app.PendingIntent
-import android.net.Uri
-import androidx.core.content.FileProvider
-import java.io.File
 
 object NotificationHelper {
 
@@ -23,13 +18,11 @@ object NotificationHelper {
 
         // Create channel (Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "TrashData Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             )
-
             manager.createNotificationChannel(channel)
         }
 
@@ -41,8 +34,6 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent) // 🔥 OPEN FILE
-            .setAutoCancel(true) // dismiss on click
             .build()
 
         // ✅ SAME ID → replaces old notification
@@ -59,22 +50,6 @@ object NotificationHelper {
             mb > 0 -> "$mb MB"
             kb > 0 -> "$kb KB"
             else -> "$size B"
-        }
-    }
-
-    // 🔥 DETECT FILE TYPE
-    private fun getMimeType(path: String): String {
-
-        return when {
-            path.endsWith(".pdf") -> "application/pdf"
-            path.endsWith(".jpg") || path.endsWith(".jpeg") -> "image/jpeg"
-            path.endsWith(".png") -> "image/png"
-            path.endsWith(".mp4") -> "video/mp4"
-            path.endsWith(".mp3") -> "audio/mpeg"
-            path.endsWith(".txt") -> "text/plain"
-            path.endsWith(".doc") || path.endsWith(".docx") -> "application/msword"
-            path.endsWith(".zip") -> "application/zip"
-            else -> "*/*"
         }
     }
 }
