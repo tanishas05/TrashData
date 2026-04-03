@@ -99,6 +99,7 @@ class SecondActivity : Activity() {
         deleteSelectedBtn.text = "Delete Selected"
         deleteSelectedBtn.setBackgroundColor(Color.RED)
 
+
         pieChart = PieChart(this)
         pieChart.layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 600
