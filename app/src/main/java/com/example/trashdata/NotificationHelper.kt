@@ -14,53 +14,52 @@ import java.io.File
 object NotificationHelper {
 
     private const val CHANNEL_ID = "trashdata_channel"
+    private const val NOTIFICATION_ID = 1
 
-    fun showNotification(context: Context, title: String, filePath: String) {
+    fun showSummaryNotification(context: Context, count: Int, size: Long) {
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // 🔵 Create channel for Android 8+
+        // Create channel (Android 8+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "TrashData Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             )
+
             manager.createNotificationChannel(channel)
         }
 
-        // 🔥 OPEN FILE INTENT
-        val file = File(filePath)
+        val summaryText = "Found $count old files\nTotal size: ${formatSize(size)}"
 
-        val uri: Uri = FileProvider.getUriForFile(
-            context,
-            context.packageName + ".provider",
-            file
-        )
-
-        val intent = Intent(Intent.ACTION_VIEW)
-        intent.setDataAndType(uri, getMimeType(filePath))
-        intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
-
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            System.currentTimeMillis().toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // 🔔 BUILD NOTIFICATION
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(file.name)
+            .setContentTitle("Scan Complete")
+            .setContentText("Trash detected")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent) // 🔥 OPEN FILE
             .setAutoCancel(true) // dismiss on click
             .build()
 
-        manager.notify(System.currentTimeMillis().toInt(), notification)
+        // ✅ SAME ID → replaces old notification
+        manager.notify(NOTIFICATION_ID, notification)
+    }
+
+    private fun formatSize(size: Long): String {
+        val kb = size / 1024
+        val mb = kb / 1024
+        val gb = mb / 1024
+
+        return when {
+            gb > 0 -> "$gb GB"
+            mb > 0 -> "$mb MB"
+            kb > 0 -> "$kb KB"
+            else -> "$size B"
+        }
     }
 
     // 🔥 DETECT FILE TYPE

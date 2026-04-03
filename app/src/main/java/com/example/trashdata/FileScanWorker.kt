@@ -9,79 +9,45 @@ import java.io.File
 class FileScanWorker(context: Context, params: WorkerParameters) :
     Worker(context, params) {
 
-    // 🔥 Keep (but not used in logic now)
-    private val appStartTime = System.currentTimeMillis()
+    private var oldFileCount = 0
+    private var totalSize = 0L
 
     override fun doWork(): Result {
 
         val root = Environment.getExternalStorageDirectory()
+        scanDirectory(root)
 
-        val prefs = applicationContext.getSharedPreferences("scan_prefs", Context.MODE_PRIVATE)
-        val lastScanTime = prefs.getLong("last_scan_time", 0L)
-
-        // 🔥 Run scan
-        val foundFiles = mutableListOf<String>()
-        scanDirectory(root, lastScanTime, foundFiles)
-
-        // 🔥 Send SINGLE summary notification (no spam)
-        if (foundFiles.isNotEmpty()) {
-            NotificationHelper.showNotification(
-                applicationContext,
-                "TrashData Alert",
-                "${foundFiles.size} old files found"
-            )
-        }
-
-        // 🔥 Save current scan time
-        prefs.edit().putLong("last_scan_time", System.currentTimeMillis()).apply()
+        // 🔔 Send ONE summary notification
+        NotificationHelper.showSummaryNotification(
+            applicationContext,
+            oldFileCount,
+            totalSize
+        )
 
         return Result.success()
     }
 
-    // 🔥 UPDATED FUNCTION
-    private fun scanDirectory(dir: File, lastScanTime: Long, foundFiles: MutableList<String>) {
-
-        if (dir.absolutePath.contains("/Android")) return
+    private fun scanDirectory(dir: File) {
 
         val now = System.currentTimeMillis()
-        val fifteenMinutes = 15 * 60 * 1000
+        val fiveMinutes = 5 * 60 * 1000
 
         val files = dir.listFiles() ?: return
 
         for (file in files) {
 
-            if (!file.exists()) continue
+            val diff = now - file.lastModified()
 
-            val lastModified = file.lastModified()
-            val diff = now - lastModified
-
-            // 🔥 CONDITION 1: file became old (crossed 15 min)
-            val justBecameOld = lastModified in lastScanTime..now && diff > fifteenMinutes
-
-            // 🔥 CONDITION 2: not already notified
-            val notNotified = !isAlreadyNotified(file.absolutePath)
-
-            if (justBecameOld && notNotified) {
-
-                foundFiles.add(file.name)
-
-                markAsNotified(file.absolutePath)
+            // ✅ Check for old files (older than 5 minutes)
+            if (diff > fiveMinutes) {
+                oldFileCount++
+                totalSize += file.length()
             }
 
+            // 🔁 Recursively scan subfolders
             if (file.isDirectory) {
-                scanDirectory(file, lastScanTime, foundFiles)
+                scanDirectory(file)
             }
         }
-    }
-
-    // 🔥 Prevent duplicate notifications
-    private fun isAlreadyNotified(path: String): Boolean {
-        val prefs = applicationContext.getSharedPreferences("notified_files", Context.MODE_PRIVATE)
-        return prefs.getBoolean(path, false)
-    }
-
-    private fun markAsNotified(path: String) {
-        val prefs = applicationContext.getSharedPreferences("notified_files", Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(path, true).apply()
     }
 }
