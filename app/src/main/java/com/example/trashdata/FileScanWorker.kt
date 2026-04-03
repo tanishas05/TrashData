@@ -8,12 +8,21 @@ import java.io.File
 
 class FileScanWorker(context: Context, params: WorkerParameters) :
     Worker(context, params) {
-    private val appStartTime = System.currentTimeMillis()
+
+    private var oldFileCount = 0
+    private var totalSize = 0L
 
     override fun doWork(): Result {
 
         val root = Environment.getExternalStorageDirectory()
         scanDirectory(root)
+
+        // 🔔 Send ONE summary notification
+        NotificationHelper.showSummaryNotification(
+            applicationContext,
+            oldFileCount,
+            totalSize
+        )
 
         return Result.success()
     }
@@ -29,15 +38,13 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
 
             val diff = now - file.lastModified()
 
-            if (file.lastModified() > appStartTime && diff > fiveMinutes) {
-                // Notify for all files older than 5 minutes
-                NotificationHelper.showNotification(
-                    applicationContext,
-                    "Old file detected",
-                    file.absolutePath
-                )
+            // ✅ Check for old files (older than 5 minutes)
+            if (diff > fiveMinutes) {
+                oldFileCount++
+                totalSize += file.length()
             }
 
+            // 🔁 Recursively scan subfolders
             if (file.isDirectory) {
                 scanDirectory(file)
             }
