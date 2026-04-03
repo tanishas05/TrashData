@@ -5,11 +5,17 @@ import android.os.Bundle
 import android.os.Environment
 import android.widget.*
 import android.graphics.Color
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.core.view.GravityCompat
+import android.graphics.Typeface
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.graphics.drawable.GradientDrawable
 import java.io.File
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.text.Editable
 import android.text.TextWatcher
 import com.github.mikephil.charting.charts.PieChart
@@ -20,6 +26,7 @@ import com.github.mikephil.charting.formatter.PercentFormatter
 
 class SecondActivity : Activity() {
 
+    private lateinit var drawerLayout: DrawerLayout
     private lateinit var listView: ListView
     private lateinit var filterSpinner: Spinner
     private lateinit var deleteSelectedBtn: Button
@@ -29,81 +36,102 @@ class SecondActivity : Activity() {
     private lateinit var pieChart: PieChart
     private lateinit var sortToggle: Button
     private lateinit var progressBar: ProgressBar
-
     private val allFiles = mutableListOf<File>()
     private val displayFiles = mutableListOf<File>()
     private val duplicateMap = HashMap<String, MutableList<File>>()
-
     private val selectedFiles = mutableSetOf<File>()
     private var scannedFiles = 0
     private var totalFiles = 0
     private var sortBySize = true
+    private var initialFilter: String = "All Files"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
+        // 🔹 Step 1: Get initial filter from Intent
+        initialFilter = intent.getStringExtra("filter") ?: "All Files"
 
-        // 🔵 HEADER
-        val header = LinearLayout(this)
-        header.orientation = LinearLayout.VERTICAL
-        header.setBackgroundColor(Color.parseColor("#2F80ED"))
-        header.setPadding(30, 80, 30, 40)
 
-        val title = TextView(this)
-        title.text = "Files Cleaner"
-        title.setTextColor(Color.WHITE)
-        title.textSize = 22f
+        // 🔵 ROOT DRAWER
+        drawerLayout = DrawerLayout(this)
 
-        fileCount = TextView(this)
-        fileCount.setTextColor(Color.WHITE)
+        // ================= HEADER =================
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#2F80ED"))
+            setPadding(40, 100, 40, 40)
+            gravity = Gravity.CENTER
+        }
 
-        progressText = TextView(this)
-        progressText.setTextColor(Color.WHITE)
+        // Hamburger
+        val hamburger = TextView(this).apply {
+            text = "☰"
+            textSize = 28f
+            setTextColor(Color.WHITE)
+            setTypeface(null, Typeface.BOLD)
+            setOnClickListener { drawerLayout.openDrawer(GravityCompat.START) }
+        }
+        header.addView(hamburger, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.START })
 
-        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
-        progressBar.max = 100
+        val title = TextView(this).apply {
+            text = "Files Cleaner"
+            setTextColor(Color.WHITE)
+            textSize = 22f
+            setTypeface(null, Typeface.BOLD)
+        }
+
+        fileCount = TextView(this).apply { setTextColor(Color.WHITE) }
+        progressText = TextView(this).apply { setTextColor(Color.WHITE) }
+        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
 
         header.addView(title)
         header.addView(fileCount)
         header.addView(progressText)
         header.addView(progressBar)
 
-        // ⚪ CONTENT
-        val container = LinearLayout(this)
-        container.orientation = LinearLayout.VERTICAL
-        container.setPadding(20,20,20,20)
+        // ================= CONTENT =================
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20, 20, 20, 20)
+        }
 
-        searchBar = EditText(this)
-        searchBar.hint = "Search files..."
-
-        val bg = GradientDrawable()
-        bg.cornerRadius = 50f
-        bg.setColor(Color.WHITE)
-        searchBar.background = bg
-        searchBar.setPadding(30,20,30,20)
-
-        filterSpinner = Spinner(this)
-        val filters = arrayOf("All Files","Duplicate Files")
-        filterSpinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            filters
-        )
-
-        sortToggle = Button(this)
-        sortToggle.text = "Sort: Size"
-
-        deleteSelectedBtn = Button(this)
-        deleteSelectedBtn.text = "Delete Selected"
-        deleteSelectedBtn.setBackgroundColor(Color.RED)
+        searchBar = EditText(this).apply {
+            hint = "Search files..."
+            background = GradientDrawable().apply {
+                cornerRadius = 50f
+                setColor(Color.WHITE)
+            }
+            setPadding(30, 20, 30, 20)
+        }
 
 
-        pieChart = PieChart(this)
-        pieChart.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 600
-        )
+        filterSpinner = Spinner(this).apply {
+            val filters = arrayOf("All Files", "Duplicate Files", "Old Files", "Large Files")
+            adapter = ArrayAdapter(this@SecondActivity, android.R.layout.simple_spinner_dropdown_item, filters)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
+                    applyFilter(parent.getItemAtPosition(position).toString())
+                }
+                override fun onNothingSelected(parent: AdapterView<*>) {}
+            }
+        }
+        // 🔹 Step 2: Set spinner to initial filter
+        val spinnerAdapter = filterSpinner.adapter as ArrayAdapter<String>
+        val spinnerPosition = spinnerAdapter.getPosition(initialFilter)
+        if (spinnerPosition >= 0) filterSpinner.setSelection(spinnerPosition)
+
+        sortToggle = Button(this).apply { text = "Sort: Size" }
+        deleteSelectedBtn = Button(this).apply {
+            text = "Delete Selected"
+            setBackgroundColor(Color.RED)
+        }
+
+        pieChart = PieChart(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 600)
+        }
 
         listView = ListView(this)
 
@@ -114,63 +142,102 @@ class SecondActivity : Activity() {
         container.addView(deleteSelectedBtn)
         container.addView(listView)
 
-        // 🔻 BOTTOM NAVIGATION
-        val navBar = LinearLayout(this)
-        navBar.orientation = LinearLayout.HORIZONTAL
-        navBar.setBackgroundColor(Color.WHITE)
+        // ================= MAIN CONTENT =================
+        val mainContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(header)
+            addView(container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        val cleanerBtn = Button(this)
-        cleanerBtn.text = "Cleaner"
+        }
 
-        val filesBtn = Button(this)
-        filesBtn.text = "Files"
+        // ================= DRAWER MENU =================
+        val drawerMenu = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.LTGRAY)
+            layoutParams = DrawerLayout.LayoutParams(600, DrawerLayout.LayoutParams.MATCH_PARENT).apply {
+                gravity = GravityCompat.START
+            }
+        }
+        val menuCleaner = TextView(this).apply {
+            text = "Cleaner"
+            setPadding(20, 40, 20, 40)
+            setOnClickListener {
+                startActivity(Intent(this@SecondActivity, MainActivity::class.java))
+                drawerLayout.closeDrawer(GravityCompat.START)
+            }
+        }
+        val menuFiles = TextView(this).apply {
+            text = "Files"
+            setPadding(20, 40, 20, 40)
+            setOnClickListener { drawerLayout.closeDrawer(GravityCompat.START) }
+        }
+        // 🔹 ADD SETTINGS
+        val menuSettings = TextView(this).apply {
+            text = "Settings"
+            setPadding(20, 40, 20, 40)
+            setOnClickListener {
+                Toast.makeText(this@SecondActivity, "Settings clicked", Toast.LENGTH_SHORT).show()
+                drawerLayout.closeDrawer(GravityCompat.START)
+            }
+        }
 
-        navBar.addView(cleanerBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f))
-        navBar.addView(filesBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f))
+        drawerMenu.addView(menuCleaner)
+        drawerMenu.addView(menuFiles)
+        drawerMenu.addView(menuSettings)
 
-        root.addView(header)
-        root.addView(container, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,0,1f
-        ))
-        root.addView(navBar)
+        drawerLayout.addView(mainContent)
+        drawerLayout.addView(drawerMenu)
+        setContentView(drawerLayout)
 
-        setContentView(root)
-
-        scanFiles()
+        // ================= LOGIC =================
+        checkPermissionsAndScan() // your function, intact
 
         sortToggle.setOnClickListener {
             sortBySize = !sortBySize
-            sortToggle.text = if(sortBySize) "Sort: Size" else "Sort: Date"
+            sortToggle.text = if (sortBySize) "Sort: Size" else "Sort: Date"
             applyFilter(filterSpinner.selectedItem.toString())
         }
 
-        searchBar.addTextChangedListener(object: TextWatcher{
+        searchBar.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
                 val q = s.toString().lowercase()
                 showFiles(displayFiles.filter { it.name.lowercase().contains(q) })
             }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int){}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int){}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
         deleteSelectedBtn.setOnClickListener {
-
-            for (file in selectedFiles) {
-                if (file.exists()) file.delete()
-            }
-
+            for (file in selectedFiles) if (file.exists()) file.delete()
             Toast.makeText(this, "Deleted ${selectedFiles.size} files", Toast.LENGTH_SHORT).show()
-
             selectedFiles.clear()
-
             applyFilter(filterSpinner.selectedItem.toString())
         }
 
-        cleanerBtn.setOnClickListener {
-            startActivity(Intent(this, MainActivity::class.java))
+    }
+
+    private fun checkPermissionsAndScan() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            } else {
+                scanFiles()
+            }
+        } else {
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE), 100)
+            } else {
+                scanFiles()
+            }
         }
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 100 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            scanFiles()
+        }
+    }
     // 🔥 SCAN
     private fun scanFiles(){
         Thread{
@@ -179,15 +246,19 @@ class SecondActivity : Activity() {
             scanRecursive(root)
             buildDuplicateMap()
 
+            // Apply filter on UI thread after scanning
             runOnUiThread{
                 progressText.text = "Scan Complete"
                 progressBar.progress = 100
-                applyFilter("All Files")
+
+                // ✅ Apply the filter now that allFiles is ready
+                filterSpinner.setSelection((filterSpinner.adapter as ArrayAdapter<String>).getPosition(initialFilter))
+                applyFilter(initialFilter)
+
                 showStorageChart()
             }
         }.start()
     }
-
     private fun scanRecursive(dir: File){
         if(dir.absolutePath.contains("/Android")) return
 
@@ -316,22 +387,29 @@ class SecondActivity : Activity() {
         } catch(e:Exception){""}
     }
 
-    private fun applyFilter(type:String){
+    private fun applyFilter(type: String) {
         displayFiles.clear()
-        for(f in allFiles){
-            when(type){
-                "All Files"->displayFiles.add(f)
-                "Duplicate Files"->{
-                    val h=getFileHash(f)
-                    if(duplicateMap[h]?.size?:0>1) displayFiles.add(f)
+        val now = System.currentTimeMillis()
+        val oneWeek = 7 * 24 * 60 * 60 * 1000L // example: old = 1 week
+        val minSize = 5 * 1024 * 1024L // 5 MB for large files
+
+        for (f in allFiles) {
+            when (type) {
+                "All Files" -> displayFiles.add(f)
+                "Duplicate Files" -> {
+                    val h = getFileHash(f)
+                    if (duplicateMap[h]?.size ?: 0 > 1) displayFiles.add(f)
                 }
+                "Old Files" -> if (now - f.lastModified() > oneWeek) displayFiles.add(f)
+                "Recent Files" -> if (now - f.lastModified() <= oneWeek) displayFiles.add(f)
+                "Large Files" -> if (f.length() >= minSize) displayFiles.add(f)
             }
         }
 
-        if(sortBySize) displayFiles.sortByDescending{it.length()}
-        else displayFiles.sortByDescending{it.lastModified()}
+        if (sortBySize) displayFiles.sortByDescending { it.length() }
+        else displayFiles.sortByDescending { it.lastModified() }
 
-        fileCount.text="${displayFiles.size} files"
+        fileCount.text = "${displayFiles.size} files"
         showFiles(displayFiles)
     }
 

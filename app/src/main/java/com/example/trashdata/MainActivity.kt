@@ -60,6 +60,7 @@ class MainActivity : Activity() {
         // 🔵 ROOT
         drawerLayout = DrawerLayout(this)
 
+
         // ================= HEADER =================
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -172,35 +173,19 @@ class MainActivity : Activity() {
             }
         }
 
-        grid.addView(createItem("🗂", "Old Files") {
-            startActivity(Intent(this, SecondActivity::class.java).putExtra("filter","Old Files"))
-        })
-        grid.addView(createItem("📦", "Large Files") {
-            startActivity(Intent(this, SecondActivity::class.java).putExtra("filter","Large Files"))
-        })
-        grid.addView(createItem("🧹", "Duplicate Files") {
-            startActivity(Intent(this, SecondActivity::class.java))
-        })
-        grid.addView(createItem("📁", "All Files") {
-            startActivity(Intent(this, SecondActivity::class.java))
-        })
+        fun openFilesActivity(filter: String) {
+            val intent = Intent(this, SecondActivity::class.java)
+            intent.putExtra("filter", filter)
+            startActivity(intent)
+        }
+
+        grid.addView(createItem("🗂", "Old Files") { openFilesActivity("Old Files") })
+        grid.addView(createItem("📦", "Large Files") { openFilesActivity("Large Files") })
+        grid.addView(createItem("🧹", "Duplicate Files") { openFilesActivity("Duplicate Files") })
+        grid.addView(createItem("📁", "All Files") { openFilesActivity("All Files") })
 
         container.addView(grid)
 
-        // ================= BOTTOM NAV =================
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.parseColor("#EEEEEE"))
-        }
-
-        val cleanerBtnNav = Button(this).apply { text = "Cleaner" }
-        val filesBtnNav = Button(this).apply {
-            text = "Files"
-            setOnClickListener { startActivity(Intent(this@MainActivity, SecondActivity::class.java)) }
-        }
-
-        nav.addView(cleanerBtnNav, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        nav.addView(filesBtnNav, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
         // ================= MAIN CONTENT =================
         val mainContent = LinearLayout(this).apply {
@@ -212,7 +197,6 @@ class MainActivity : Activity() {
             )
             addView(header)
             addView(container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
-            addView(nav)
         }
 
         // ================= DRAWER MENU =================
