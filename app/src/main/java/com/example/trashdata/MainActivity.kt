@@ -1,11 +1,14 @@
 package com.example.trashdata
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
-import android.content.Intent
 import android.net.Uri
 import android.widget.*
 import android.graphics.Color
@@ -19,7 +22,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import java.util.ArrayDeque
 
+// =================== SCAN FLAGS ===================
+object FileScanWorkerFlags {
+    val isScanning = java.util.concurrent.atomic.AtomicBoolean(false)
+    val cancelScan = java.util.concurrent.atomic.AtomicBoolean(false)
+}
 
 class MainActivity : Activity() {
 
@@ -29,6 +39,17 @@ class MainActivity : Activity() {
 
     private var scanning = false
     private var fileCount = 0
+
+    // BroadcastReceiver for background scan progress
+    private val scanProgressReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val scannedFiles = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
+            runOnUiThread {
+                counterText.text = "Files scanned: $scannedFiles"
+                statusText.text = "Scanning (background)..."
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,6 +97,14 @@ class MainActivity : Activity() {
         header.addView(subtitle)
         header.addView(cleanBtn)
 
+        // 🔵 CANCEL BUTTON
+        val cancelBtn = TextView(this)
+        cancelBtn.text = "CANCEL"
+        cancelBtn.gravity = Gravity.CENTER
+        cancelBtn.setTextColor(Color.WHITE)
+        cancelBtn.textSize = 14f
+        header.addView(cancelBtn)
+
         // ⚪ CONTENT CARD
         val container = LinearLayout(this)
         container.orientation = LinearLayout.VERTICAL
@@ -93,18 +122,15 @@ class MainActivity : Activity() {
         // 🔲 GRID
         val grid = GridLayout(this)
         grid.columnCount = 2
-
         val gridParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         )
         grid.layoutParams = gridParams
-
         grid.alignmentMode = GridLayout.ALIGN_MARGINS
         grid.useDefaultMargins = true
 
         fun createItem(icon: String, text: String, action: () -> Unit): LinearLayout {
-
             val box = LinearLayout(this)
             box.orientation = LinearLayout.VERTICAL
             box.gravity = Gravity.CENTER
@@ -135,20 +161,16 @@ class MainActivity : Activity() {
         grid.addView(createItem("🗂", "Old Files") {
             startActivity(Intent(this, SecondActivity::class.java).putExtra("filter","Old Files"))
         })
-
         grid.addView(createItem("📦", "Large Files") {
             startActivity(Intent(this, SecondActivity::class.java).putExtra("filter","Large Files"))
         })
-
         grid.addView(createItem("🧹", "Duplicate Files") {
             startActivity(Intent(this, SecondActivity::class.java))
         })
-
         grid.addView(createItem("📁", "Files") {
             startActivity(Intent(this, SecondActivity::class.java))
         })
 
-        // ➕ ADD ALL
         container.addView(statusText)
         container.addView(counterText)
         container.addView(progressBar)
@@ -182,8 +204,14 @@ class MainActivity : Activity() {
         setContentView(root)
 
         // 🔥 CLEAN BUTTON ACTION
-        cleanBtn.setOnClickListener {
-            startScan()
+        cleanBtn.setOnClickListener { startScan() }
+
+        // 🔵 CANCEL BUTTON ACTION
+        cancelBtn.setOnClickListener {
+            FileScanWorkerFlags.cancelScan.set(true)
+            scanning = false
+            statusText.text = "Scan canceled"
+            progressBar.visibility = ProgressBar.GONE
         }
 
         // 🔧 PERMISSIONS
@@ -199,8 +227,9 @@ class MainActivity : Activity() {
 
         requestNotificationPermission()
         createNotificationChannel()
-        // ---- ADD THIS RIGHT HERE ----
-        val workRequest = PeriodicWorkRequestBuilder<FileScanWorker>(15, java.util.concurrent.TimeUnit.MINUTES)
+
+        // 🔁 Background periodic scan
+        val workRequest = PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES)
             .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
@@ -208,60 +237,72 @@ class MainActivity : Activity() {
             ExistingPeriodicWorkPolicy.KEEP,
             workRequest
         )
-// -----------------------------
+
+        // 🔔 Register broadcast receiver for background scan progress
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            scanProgressReceiver,
+            IntentFilter(FileScanWorker.ACTION_PROGRESS)
+        )
     }
 
+    // =================== MANUAL SCAN ===================
     private fun startScan() {
         scanning = true
         fileCount = 0
+        FileScanWorkerFlags.cancelScan.set(false)
 
         statusText.text = "Scanning..."
         progressBar.visibility = ProgressBar.VISIBLE
 
         Thread {
             val storageDir = Environment.getExternalStorageDirectory()
-            listFilesRecursive(storageDir)
+            scanIterative(storageDir) { scannedFiles ->
+                runOnUiThread { counterText.text = "Files scanned: $scannedFiles" }
+            }
 
             runOnUiThread {
-                statusText.text = "Scan Complete"
+                if (!FileScanWorkerFlags.cancelScan.get()) {
+                    statusText.text = "Scan Complete"
+                    showNotification("Scan complete. $fileCount files scanned.")
+                }
                 progressBar.visibility = ProgressBar.GONE
-                showNotification("Scan complete. $fileCount files scanned.")
             }
         }.start()
     }
 
-    private fun listFilesRecursive(dir: File) {
-        if (!scanning) return
-        if (dir.absolutePath.contains("/Android/")) return
+    private fun scanIterative(root: File, onProgress: (Int) -> Unit) {
+        val queue = ArrayDeque<File>()
+        queue.add(root)
+        val now = System.currentTimeMillis()
+        val fiveMinutes = 5 * 60 * 1000
 
-        val files = dir.listFiles() ?: return
+        while (queue.isNotEmpty() && !FileScanWorkerFlags.cancelScan.get()) {
+            val dir = queue.removeFirst()
+            val files = dir.listFiles() ?: continue
 
-        for (file in files) {
-            if (!scanning) return
+            for (file in files) {
+                if (FileScanWorkerFlags.cancelScan.get()) return
 
-            fileCount++
+                if (file.isFile && now - file.lastModified() > fiveMinutes && isRelevant(file)) {
+                    fileCount++
+                }
 
-            runOnUiThread {
-                counterText.text = "Files scanned: $fileCount"
+                if (file.isDirectory) queue.add(file)
             }
-
-            if (file.isDirectory) {
-                listFilesRecursive(file)
-            }
+            onProgress(fileCount)
         }
     }
 
-    private fun requestAllFilesPermission() {
-        try {
-            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-            intent.data = Uri.parse("package:$packageName")
-            startActivity(intent)
-        } catch (e: Exception) {
-            val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-            startActivity(intent)
-        }
+    private fun isRelevant(file: File): Boolean {
+        val path = file.absolutePath.lowercase()
+        val minSize = 1 * 1024 * 1024 // 1 MB
+        return (path.endsWith(".jpg") || path.endsWith(".jpeg") ||
+                path.endsWith(".png") || path.endsWith(".mp4") ||
+                path.endsWith(".mp3") || path.endsWith(".pdf")) &&
+                file.length() > minSize
     }
 
+    // =================== BACKGROUND SCAN ===================
     private fun startBackgroundScan() {
         val workRequest =
             PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES)
@@ -272,6 +313,18 @@ class MainActivity : Activity() {
             ExistingPeriodicWorkPolicy.KEEP,
             workRequest
         )
+    }
+
+    // =================== PERMISSIONS & NOTIFICATIONS ===================
+    private fun requestAllFilesPermission() {
+        try {
+            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+        } catch (e: Exception) {
+            val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+            startActivity(intent)
+        }
     }
 
     private fun requestNotificationPermission() {
@@ -290,7 +343,6 @@ class MainActivity : Activity() {
                 "TrashData Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             )
-
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
         }
@@ -311,5 +363,11 @@ class MainActivity : Activity() {
         ) {
             manager.notify(1, builder.build())
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Unregister broadcast receiver
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)
     }
 }
