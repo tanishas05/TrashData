@@ -8,13 +8,15 @@ import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
 import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
 import java.io.File
 import android.content.Intent
 import android.text.Editable
 import android.text.TextWatcher
 import com.github.mikephil.charting.charts.PieChart
 import com.github.mikephil.charting.data.*
+import com.github.mikephil.charting.listener.OnChartValueSelectedListener
+import com.github.mikephil.charting.highlight.Highlight
+import com.github.mikephil.charting.formatter.PercentFormatter
 
 class SecondActivity : Activity() {
 
@@ -26,24 +28,22 @@ class SecondActivity : Activity() {
     private lateinit var progressText: TextView
     private lateinit var pieChart: PieChart
     private lateinit var sortToggle: Button
+    private lateinit var progressBar: ProgressBar
 
     private val allFiles = mutableListOf<File>()
     private val displayFiles = mutableListOf<File>()
-    private val selectedFiles = mutableSetOf<File>()
-
     private val duplicateMap = HashMap<String, MutableList<File>>()
 
-    private var totalFiles = 0
+    private val selectedFiles = mutableSetOf<File>()
     private var scannedFiles = 0
+    private var totalFiles = 0
     private var sortBySize = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 🔵 ROOT
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setBackgroundColor(Color.parseColor("#F5F7FA"))
 
         // 🔵 HEADER
         val header = LinearLayout(this)
@@ -62,54 +62,48 @@ class SecondActivity : Activity() {
         progressText = TextView(this)
         progressText.setTextColor(Color.WHITE)
 
+        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+        progressBar.max = 100
+
         header.addView(title)
         header.addView(fileCount)
         header.addView(progressText)
+        header.addView(progressBar)
 
         // ⚪ CONTENT
         val container = LinearLayout(this)
         container.orientation = LinearLayout.VERTICAL
-        container.setPadding(20, 20, 20, 20)
+        container.setPadding(20,20,20,20)
 
-        // 🔍 SEARCH
         searchBar = EditText(this)
         searchBar.hint = "Search files..."
+
         val bg = GradientDrawable()
         bg.cornerRadius = 50f
         bg.setColor(Color.WHITE)
         searchBar.background = bg
         searchBar.setPadding(30,20,30,20)
 
-        // 🔽 FILTER
         filterSpinner = Spinner(this)
-        val filters = arrayOf(
-            "All Files",
-            "Old Files",
-            "Large Files",
-            "Duplicate Files",
-            "APK Files",
-            "Temp Files"
-        )
+        val filters = arrayOf("All Files","Duplicate Files")
         filterSpinner.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_dropdown_item,
             filters
         )
 
-        // 🔄 SORT BUTTON
         sortToggle = Button(this)
         sortToggle.text = "Sort: Size"
 
-        // 🔴 DELETE
         deleteSelectedBtn = Button(this)
         deleteSelectedBtn.text = "Delete Selected"
         deleteSelectedBtn.setBackgroundColor(Color.RED)
-        deleteSelectedBtn.setTextColor(Color.WHITE)
 
-        // 📊 PIE CHART
         pieChart = PieChart(this)
+        pieChart.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 600
+        )
 
-        // 📄 LIST
         listView = ListView(this)
 
         container.addView(pieChart)
@@ -119,9 +113,10 @@ class SecondActivity : Activity() {
         container.addView(deleteSelectedBtn)
         container.addView(listView)
 
-        // 🔻 NAV
+        // 🔻 BOTTOM NAVIGATION
         val navBar = LinearLayout(this)
         navBar.orientation = LinearLayout.HORIZONTAL
+        navBar.setBackgroundColor(Color.WHITE)
 
         val cleanerBtn = Button(this)
         cleanerBtn.text = "Cleaner"
@@ -134,51 +129,39 @@ class SecondActivity : Activity() {
 
         root.addView(header)
         root.addView(container, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            LinearLayout.LayoutParams.MATCH_PARENT,0,1f
         ))
         root.addView(navBar)
 
         setContentView(root)
 
-        // 🔥 START SCAN
         scanFiles()
 
-        // 🔄 SORT TOGGLE
         sortToggle.setOnClickListener {
             sortBySize = !sortBySize
-            sortToggle.text = if (sortBySize) "Sort: Size" else "Sort: Date"
+            sortToggle.text = if(sortBySize) "Sort: Size" else "Sort: Date"
             applyFilter(filterSpinner.selectedItem.toString())
         }
 
-        // FILTER
-        filterSpinner.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                    applyFilter(filters[position])
-                }
-                override fun onNothingSelected(parent: AdapterView<*>) {}
-            }
-
-        // SEARCH
-        searchBar.addTextChangedListener(object : TextWatcher {
+        searchBar.addTextChangedListener(object: TextWatcher{
             override fun afterTextChanged(s: Editable?) {
-                val query = s.toString().lowercase()
-                val filtered = displayFiles.filter {
-                    it.name.lowercase().contains(query)
-                }
-                showFiles(filtered)
+                val q = s.toString().lowercase()
+                showFiles(displayFiles.filter { it.name.lowercase().contains(q) })
             }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int){}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int){}
         })
 
-        // DELETE
         deleteSelectedBtn.setOnClickListener {
-            for(file in selectedFiles){
-                if(file.exists()) file.delete()
+
+            for (file in selectedFiles) {
+                if (file.exists()) file.delete()
             }
-            Toast.makeText(this,"Deleted selected files",Toast.LENGTH_SHORT).show()
+
+            Toast.makeText(this, "Deleted ${selectedFiles.size} files", Toast.LENGTH_SHORT).show()
+
             selectedFiles.clear()
+
             applyFilter(filterSpinner.selectedItem.toString())
         }
 
@@ -187,140 +170,171 @@ class SecondActivity : Activity() {
         }
     }
 
-    private fun scanFiles() {
-        Thread {
+    // 🔥 SCAN
+    private fun scanFiles(){
+        Thread{
             val root = Environment.getExternalStorageDirectory()
+            totalFiles = countFiles(root)
             scanRecursive(root)
-
-            totalFiles = allFiles.size
             buildDuplicateMap()
 
-            runOnUiThread {
+            runOnUiThread{
+                progressText.text = "Scan Complete"
+                progressBar.progress = 100
                 applyFilter("All Files")
                 showStorageChart()
             }
         }.start()
     }
 
-    private fun scanRecursive(dir: File) {
-        if (dir.absolutePath.contains("/Android")) return
+    private fun scanRecursive(dir: File){
+        if(dir.absolutePath.contains("/Android")) return
 
         val files = dir.listFiles() ?: return
 
         for(file in files){
-            if(file.isDirectory){
-                scanRecursive(file)
-            } else {
+            if(file.isDirectory) scanRecursive(file)
+            else{
                 allFiles.add(file)
                 scannedFiles++
 
-                runOnUiThread {
-                    val percent = (scannedFiles * 100 / (totalFiles + 1))
-                    progressText.text = "Scanning: $percent%"
+                if(scannedFiles % 100 == 0){
+                    val percent = (scannedFiles*100)/totalFiles
+                    runOnUiThread{
+                        progressText.text = "Scanning: $percent%"
+                        progressBar.progress = percent
+                    }
                 }
             }
         }
     }
 
-    private fun buildDuplicateMap() {
-        for (file in allFiles) {
-            val hash = getFileHash(file)
-            if (hash.isNotEmpty()) {
-                duplicateMap.getOrPut(hash) { mutableListOf() }.add(file)
-            }
+    private fun countFiles(dir: File):Int{
+        if(dir.absolutePath.contains("/Android")) return 0
+        val files = dir.listFiles() ?: return 0
+        var count=0
+        for(f in files){
+            if(f.isDirectory) count+=countFiles(f)
+            else count++
         }
+        return count
     }
 
-    private fun applyFilter(type:String){
+    // 🔥 PIE CHART
+    private fun showStorageChart(){
 
-        displayFiles.clear()
+        var images=0f; var videos=0f; var audio=0f
+        var documents=0f; var apk=0f; var archives=0f; var others=0f
 
-        val now = System.currentTimeMillis()
-        val tenMin = 10 * 60 * 1000
+        for(f in allFiles){
+            val n=f.name.lowercase()
+            when{
+                n.endsWith(".jpg")||n.endsWith(".png")->images++
+                n.endsWith(".mp4")||n.endsWith(".mkv")->videos++
+                n.endsWith(".mp3")->audio++
+                n.endsWith(".pdf")||n.endsWith(".doc")||n.endsWith(".txt")->documents++
+                n.endsWith(".apk")->apk++
+                n.endsWith(".zip")||n.endsWith(".rar")->archives++
+                else->others++
+            }
+        }
 
-        for(file in allFiles){
+        val entries = arrayListOf<PieEntry>()
+        if(documents>0) entries.add(PieEntry(documents,"Documents"))
+        if(apk>0) entries.add(PieEntry(apk,"APK"))
+        if(archives>0) entries.add(PieEntry(archives,"Archives"))
+        if(videos>0) entries.add(PieEntry(videos,"Videos"))
+        if(images>0) entries.add(PieEntry(images,"Images"))
+        if(audio>0) entries.add(PieEntry(audio,"Audio"))
+        if(others>0) entries.add(PieEntry(others,"Others"))
 
-            when(type){
+        val dataSet = PieDataSet(entries,"")
+        dataSet.colors = listOf(
+            Color.GREEN,Color.BLUE,Color.YELLOW,
+            Color.GRAY,Color.MAGENTA,Color.CYAN,Color.LTGRAY
+        )
 
-                "All Files" -> displayFiles.add(file)
+        val data = PieData(dataSet)
+        data.setValueFormatter(PercentFormatter(pieChart))
 
-                "Old Files" -> if(now - file.lastModified() > tenMin) displayFiles.add(file)
+        pieChart.data = data
+        pieChart.setUsePercentValues(true)
+        pieChart.centerText = getTotalStorage()
+        pieChart.animateY(1200)
 
-                "Large Files" -> if(file.length() > 50 * 1024 * 1024) displayFiles.add(file)
+        // 🔥 CLICK FILTER
+        pieChart.setOnChartValueSelectedListener(object:OnChartValueSelectedListener{
+            override fun onValueSelected(e: Entry?, h: Highlight?) {
+                val label = (e as PieEntry).label
 
-                "Duplicate Files" -> {
-                    val hash = getFileHash(file)
-                    if (duplicateMap[hash]?.size ?: 0 > 1) {
-                        displayFiles.add(file)
+                val filtered = allFiles.filter{
+                    val n=it.name.lowercase()
+                    when(label){
+                        "Documents"->n.endsWith(".pdf")||n.endsWith(".doc")||n.endsWith(".txt")
+                        "APK"->n.endsWith(".apk")
+                        "Archives"->n.endsWith(".zip")||n.endsWith(".rar")
+                        "Videos"->n.endsWith(".mp4")||n.endsWith(".mkv")
+                        "Images"->n.endsWith(".jpg")||n.endsWith(".png")
+                        "Audio"->n.endsWith(".mp3")
+                        else->true
                     }
                 }
 
-                "APK Files" -> if(file.name.endsWith(".apk")) displayFiles.add(file)
-
-                "Temp Files" -> if(file.name.endsWith(".tmp") || file.name.endsWith(".log") || file.name.endsWith(".cache"))
-                    displayFiles.add(file)
+                displayFiles.clear()
+                displayFiles.addAll(filtered)
+                showFiles(displayFiles)
             }
-        }
+            override fun onNothingSelected(){}
+        })
 
-        // 🔥 SORTING
-        if (sortBySize) {
-            displayFiles.sortByDescending { it.length() }
-        } else {
-            displayFiles.sortByDescending { it.lastModified() }
-        }
-
-        fileCount.text = "${displayFiles.size} files found"
-        showFiles(displayFiles)
+        pieChart.invalidate()
     }
 
-    private fun showStorageChart() {
+    private fun getTotalStorage():String{
+        var total=0L
+        for(f in allFiles) total+=f.length()
+        return formatSize(total)
+    }
 
-        var images = 0f
-        var videos = 0f
-        var audio = 0f
-        var others = 0f
-
-        for (file in allFiles) {
-            val name = file.name.lowercase()
-            when {
-                name.endsWith(".jpg") || name.endsWith(".png") -> images++
-                name.endsWith(".mp4") -> videos++
-                name.endsWith(".mp3") -> audio++
-                else -> others++
-            }
+    private fun buildDuplicateMap(){
+        for(f in allFiles){
+            val h=getFileHash(f)
+            if(h.isNotEmpty())
+                duplicateMap.getOrPut(h){ mutableListOf() }.add(f)
         }
-
-        val entries = listOf(
-            PieEntry(images, "Images"),
-            PieEntry(videos, "Videos"),
-            PieEntry(audio, "Audio"),
-            PieEntry(others, "Others")
-        )
-
-        val dataSet = PieDataSet(entries, "Storage")
-        pieChart.data = PieData(dataSet)
-        pieChart.invalidate()
     }
 
     private fun getFileHash(file: File): String {
         return try {
-            val digest = java.security.MessageDigest.getInstance("MD5")
-            val buffer = ByteArray(1024)
-            val input = file.inputStream()
-
-            var read: Int
-            while (input.read(buffer).also { read = it } != -1) {
-                digest.update(buffer, 0, read)
-            }
-
-            digest.digest().joinToString("") { "%02x".format(it) }
-
-        } catch (e: Exception) {
-            ""
-        }
+            val d=java.security.MessageDigest.getInstance("MD5")
+            val b=ByteArray(1024)
+            val i=file.inputStream()
+            var r:Int
+            while(i.read(b).also{r=it}!=-1) d.update(b,0,r)
+            d.digest().joinToString(""){"%02x".format(it)}
+        } catch(e:Exception){""}
     }
 
-    private fun showFiles(files: List<File>){
+    private fun applyFilter(type:String){
+        displayFiles.clear()
+        for(f in allFiles){
+            when(type){
+                "All Files"->displayFiles.add(f)
+                "Duplicate Files"->{
+                    val h=getFileHash(f)
+                    if(duplicateMap[h]?.size?:0>1) displayFiles.add(f)
+                }
+            }
+        }
+
+        if(sortBySize) displayFiles.sortByDescending{it.length()}
+        else displayFiles.sortByDescending{it.lastModified()}
+
+        fileCount.text="${displayFiles.size} files"
+        showFiles(displayFiles)
+    }
+
+    private fun showFiles(files: List<File>) {
 
         val adapter = object : BaseAdapter() {
 
@@ -334,20 +348,31 @@ class SecondActivity : Activity() {
 
                 val row = LinearLayout(this@SecondActivity)
                 row.orientation = LinearLayout.HORIZONTAL
-                row.setPadding(20,20,20,20)
+                row.setPadding(20, 20, 20, 20)
 
+                // ✅ CHECKBOX
                 val checkBox = CheckBox(this@SecondActivity)
+
+                checkBox.isChecked = selectedFiles.contains(file)
+
                 checkBox.setOnCheckedChangeListener { _, isChecked ->
-                    if(isChecked) selectedFiles.add(file)
+                    if (isChecked) selectedFiles.add(file)
                     else selectedFiles.remove(file)
                 }
 
+                // 📄 FILE NAME
                 val name = TextView(this@SecondActivity)
                 name.text = "${file.name}\n${formatSize(file.length())}"
-                name.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT,1f)
+                name.layoutParams = LinearLayout.LayoutParams(
+                    0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f
+                )
 
+                // 🗑 SINGLE DELETE
                 val deleteBtn = Button(this@SecondActivity)
                 deleteBtn.text = "Delete"
+
                 deleteBtn.setOnClickListener {
                     file.delete()
                     applyFilter(filterSpinner.selectedItem.toString())
@@ -365,14 +390,13 @@ class SecondActivity : Activity() {
     }
 
     private fun formatSize(size:Long):String{
-        val kb = size / 1024
-        val mb = kb / 1024
-        val gb = mb / 1024
-
+        val kb=size/1024
+        val mb=kb/1024
+        val gb=mb/1024
         return when{
-            gb > 0 -> "$gb GB"
-            mb > 0 -> "$mb MB"
-            else -> "$kb KB"
+            gb>0->"$gb GB"
+            mb>0->"$mb MB"
+            else->"$kb KB"
         }
     }
 }
