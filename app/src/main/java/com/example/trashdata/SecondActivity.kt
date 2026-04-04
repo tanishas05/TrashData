@@ -3,6 +3,7 @@ package com.example.trashdata
 import android.app.Activity
 import android.os.Bundle
 import android.os.Environment
+import androidx.appcompat.app.AlertDialog
 import android.widget.*
 import android.graphics.Color
 import androidx.drawerlayout.widget.DrawerLayout
@@ -40,6 +41,7 @@ class SecondActivity : Activity() {
     private val allFiles = mutableListOf<File>()
     private val displayFiles = mutableListOf<File>()
     private val duplicateMap = HashMap<String, MutableList<File>>()
+    private val fileHashMap = HashMap<File, String>()
     private val selectedFiles = mutableSetOf<File>()
     private var scannedFiles = 0
     private var totalFiles = 0
@@ -58,6 +60,7 @@ class SecondActivity : Activity() {
 
         // 🔵 ROOT DRAWER
         drawerLayout = DrawerLayout(this)
+
 
         // ================= HEADER =================
         val header = LinearLayout(this).apply {
@@ -285,7 +288,13 @@ class SecondActivity : Activity() {
     private fun scanRecursive(dir: File){
         if(dir.absolutePath.contains("/Android")) return
 
-        val files = dir.listFiles() ?: return
+        if (!dir.canRead()) return
+
+        val files = try {
+            dir.listFiles()
+        } catch (e: Exception) {
+            null
+        } ?: return
 
         for(file in files){
             if(file.isDirectory) scanRecursive(file)
@@ -293,9 +302,10 @@ class SecondActivity : Activity() {
                 allFiles.add(file)
                 scannedFiles++
 
-                if(scannedFiles % 100 == 0){
-                    val percent = (scannedFiles*100)/totalFiles
-                    runOnUiThread{
+                // ✅ Smooth UI update (time-based)
+                if (System.currentTimeMillis() % 1000 < 50) {
+                    val percent = if (totalFiles > 0) (scannedFiles * 100) / totalFiles else 0
+                    runOnUiThread {
                         progressText.text = "Scanning: $percent%"
                         progressBar.progress = percent
                     }
@@ -324,13 +334,26 @@ class SecondActivity : Activity() {
         for(f in allFiles){
             val n=f.name.lowercase()
             when{
-                n.endsWith(".jpg")||n.endsWith(".png")->images++
-                n.endsWith(".mp4")||n.endsWith(".mkv")->videos++
-                n.endsWith(".mp3")->audio++
-                n.endsWith(".pdf")||n.endsWith(".doc")||n.endsWith(".txt")->documents++
-                n.endsWith(".apk")->apk++
-                n.endsWith(".zip")||n.endsWith(".rar")->archives++
-                else->others++
+                n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".png") ->
+                    images += f.length().toFloat()
+
+                n.endsWith(".mp4")||n.endsWith(".mkv")||n.endsWith(".avi") ->
+                    videos += f.length().toFloat()
+
+                n.endsWith(".mp3")||n.endsWith(".wav") ->
+                    audio += f.length().toFloat()
+
+                n.endsWith(".pdf")||n.endsWith(".doc")||n.endsWith(".docx")||n.endsWith(".txt") ->
+                    documents += f.length().toFloat()
+
+                n.endsWith(".apk") ->
+                    apk += f.length().toFloat()
+
+                n.endsWith(".zip")||n.endsWith(".rar") ->
+                    archives += f.length().toFloat()
+
+                else ->
+                    others += f.length().toFloat()
             }
         }
 
@@ -391,11 +414,14 @@ class SecondActivity : Activity() {
         return formatSize(total)
     }
 
-    private fun buildDuplicateMap(){
-        for(f in allFiles){
-            val h=getFileHash(f)
-            if(h.isNotEmpty())
-                duplicateMap.getOrPut(h){ mutableListOf() }.add(f)
+    private fun buildDuplicateMap() {
+        for (f in allFiles) {
+            if (f.length() < 1024 * 1024) continue // skip files < 1MB
+            val h = getFileHash(f)
+            if (h.isNotEmpty()) {
+                fileHashMap[f] = h
+                duplicateMap.getOrPut(h) { mutableListOf() }.add(f)
+            }
         }
     }
 
@@ -413,18 +439,19 @@ class SecondActivity : Activity() {
     private fun applyFilter(type: String) {
         displayFiles.clear()
         val now = System.currentTimeMillis()
-        val oneWeek = 7 * 24 * 60 * 60 * 1000L // example: old = 1 week
+        val oldThreshold = 15 * 60 * 1000L // 15 minutes
+        val recentThreshold = 15 * 60 * 1000L
         val minSize = 5 * 1024 * 1024L // 5 MB for large files
 
         for (f in allFiles) {
             when (type) {
                 "All Files" -> displayFiles.add(f)
                 "Duplicate Files" -> {
-                    val h = getFileHash(f)
+                    val h = fileHashMap[f] ?: ""
                     if (duplicateMap[h]?.size ?: 0 > 1) displayFiles.add(f)
                 }
-                "Old Files" -> if (now - f.lastModified() > oneWeek) displayFiles.add(f)
-                "Recent Files" -> if (now - f.lastModified() <= oneWeek) displayFiles.add(f)
+                "Old Files" -> if (now - f.lastModified() > oldThreshold) displayFiles.add(f)
+                "Recent Files" -> if (now - f.lastModified() <= recentThreshold) displayFiles.add(f)
                 "Large Files" -> if (f.length() >= minSize) displayFiles.add(f)
             }
         }
@@ -476,8 +503,16 @@ class SecondActivity : Activity() {
                 deleteBtn.text = "Delete"
 
                 deleteBtn.setOnClickListener {
-                    file.delete()
-                    applyFilter(filterSpinner.selectedItem.toString())
+                    AlertDialog.Builder(this@SecondActivity)
+                        .setTitle("Delete File")
+                        .setMessage("Are you sure you want to delete ${file.name}?")
+                        .setPositiveButton("Yes") { _, _ ->
+                            file.delete()
+                            applyFilter(filterSpinner.selectedItem.toString())
+                            Toast.makeText(this@SecondActivity, "File deleted", Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton("No", null)
+                        .show()
                 }
 
                 row.addView(checkBox)
