@@ -260,7 +260,6 @@ class MainActivity : Activity() {
             startBackgroundScan()
         }
 
-        requestNotificationPermission()
         createNotificationChannel()
 
 
@@ -360,21 +359,33 @@ class MainActivity : Activity() {
 
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requestPermissions(
-                arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                101
-            )
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    101
+                )
+            } else {
+                // Permission already granted → start scan
+                startBackgroundScan()
+            }
+        } else {
+            // Pre Android 13 → start scan
+            startBackgroundScan()
         }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 101) {
+
+        if (requestCode == 101) { // Notification permission
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startBackgroundScan()
+                Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "Storage access denied. Cannot scan files.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
             }
+
+            // Either way, start background scan now
+            startBackgroundScan()
         }
     }
 
@@ -411,11 +422,18 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
-            Environment.isExternalStorageManager()
-        ) {
-            startBackgroundScan()
+        // Check for Storage access first
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                // Ask for storage permission first
+                requestAllFilesPermission()
+                return
+            }
         }
+
+        // If storage permission granted, request notification permission
+        requestNotificationPermission()
+        startBackgroundScan()
     }
     override fun onDestroy() {
         super.onDestroy()
