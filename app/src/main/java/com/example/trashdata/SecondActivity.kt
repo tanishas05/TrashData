@@ -23,6 +23,7 @@ import com.github.mikephil.charting.data.*
 import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.formatter.PercentFormatter
+import android.provider.Settings
 
 class SecondActivity : Activity() {
 
@@ -44,6 +45,9 @@ class SecondActivity : Activity() {
     private var totalFiles = 0
     private var sortBySize = true
     private var initialFilter: String = "All Files"
+
+    // Flag to track if we just returned from Settings
+    private var resumedFromSettings = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -218,12 +222,14 @@ class SecondActivity : Activity() {
 
     private fun checkPermissionsAndScan() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+
             if (!Environment.isExternalStorageManager()) {
-                startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                requestAllFilesPermission() // call the function instead of directly starting intent
             } else {
                 scanFiles()
             }
         } else {
+            // Android <11
             if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE), 100)
             } else {
@@ -231,11 +237,28 @@ class SecondActivity : Activity() {
             }
         }
     }
+    private fun requestAllFilesPermission() {
+        Toast.makeText(this, "Please grant full storage access", Toast.LENGTH_SHORT).show()
+        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+        startActivity(intent)
+        resumedFromSettings = true // mark that we are waiting for user to return
+    }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 100 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             scanFiles()
+        }
+    }
+    override fun onResume() {
+        super.onResume()
+        if (resumedFromSettings) {
+            resumedFromSettings = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
+                scanFiles()
+            } else {
+                Toast.makeText(this, "Permission not granted. Scan cannot proceed.", Toast.LENGTH_SHORT).show()
+            }
         }
     }
     // 🔥 SCAN
