@@ -34,6 +34,9 @@ object FileScanWorkerFlags {
     val cancelScan = java.util.concurrent.atomic.AtomicBoolean(false)
 }
 
+object FileRepository {
+    val junkFiles = mutableListOf<File>()
+}
 class MainActivity : Activity() {
 
     private lateinit var drawerLayout: DrawerLayout
@@ -49,7 +52,7 @@ class MainActivity : Activity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val scannedFiles = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
             runOnUiThread {
-                counterText.text = "Files scanned: $scannedFiles"
+                counterText.text = "Junk files found: $scannedFiles"
                 statusText.text = "Scanning (background)..."
             }
         }
@@ -131,7 +134,7 @@ class MainActivity : Activity() {
         }
 
         statusText = TextView(this).apply { text = "Status: Idle" }
-        counterText = TextView(this).apply { text = "Files scanned: 0" }
+        counterText = TextView(this).apply { text = "Junk files found: 0" }
         progressBar = ProgressBar(this).apply { visibility = ProgressBar.GONE }
 
         container.addView(statusText)
@@ -191,7 +194,7 @@ class MainActivity : Activity() {
         grid.addView(createItem("🗂", "Old Files") { openFilesActivity("Old Files") })
         grid.addView(createItem("📦", "Large Files") { openFilesActivity("Large Files") })
         grid.addView(createItem("🧹", "Duplicate Files") { openFilesActivity("Duplicate Files") })
-        grid.addView(createItem("📁", "All Files") { openFilesActivity("All Files") })
+        grid.addView(createItem("📁", "All Files") { startScan() })
 
         container.addView(grid)
 
@@ -260,12 +263,6 @@ class MainActivity : Activity() {
         requestNotificationPermission()
         createNotificationChannel()
 
-        val workRequest = PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES).build()
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "trashdata_5min_scan",
-            ExistingPeriodicWorkPolicy.KEEP,
-            workRequest
-        )
 
         LocalBroadcastManager.getInstance(this).registerReceiver(
             scanProgressReceiver,
@@ -277,6 +274,7 @@ class MainActivity : Activity() {
     private fun startScan() {
         scanning = true
         fileCount = 0
+        FileRepository.junkFiles.clear()
         FileScanWorkerFlags.cancelScan.set(false)
 
         statusText.text = "Scanning..."
@@ -285,14 +283,17 @@ class MainActivity : Activity() {
         Thread {
             val storageDir = Environment.getExternalStorageDirectory()
             scanIterative(storageDir) { scannedFiles ->
-                runOnUiThread { counterText.text = "Files scanned: $scannedFiles" }
+                runOnUiThread { counterText.text = "Junk files found: $scannedFiles" }
             }
 
             runOnUiThread {
                 if (!FileScanWorkerFlags.cancelScan.get()) {
                     statusText.text = "Scan Complete"
-                    Toast.makeText(this, "Scan complete: $fileCount files", Toast.LENGTH_SHORT).show()
-                    showNotification("Scan complete. $fileCount files scanned.")
+                    Toast.makeText(this, "Scan complete: $fileCount junk files", Toast.LENGTH_SHORT).show()
+                    showNotification("Scan complete. $fileCount junk files found.")
+                    val intent = Intent(this, SecondActivity::class.java)
+                    intent.putExtra("filter", "All Files")
+                    startActivity(intent)
                 }
                 progressBar.visibility = ProgressBar.GONE
             }
@@ -303,10 +304,12 @@ class MainActivity : Activity() {
         val queue = ArrayDeque<File>()
         queue.add(root)
         val now = System.currentTimeMillis()
-        val fiveMinutes = 5 * 60 * 1000
+        val oldThreshold = 15 * 60 * 1000L // 15 minutes
 
         while (queue.isNotEmpty() && !FileScanWorkerFlags.cancelScan.get()) {
             val dir = queue.removeFirst()
+// ✅ ADD THIS LINE
+            if (dir.absolutePath.contains("/Android")) continue
             val files = try {
                 dir.listFiles()
             } catch (e: SecurityException) {
@@ -317,8 +320,9 @@ class MainActivity : Activity() {
             for (file in files) {
                 if (FileScanWorkerFlags.cancelScan.get()) return
 
-                if (file.isFile && now - file.lastModified() > fiveMinutes && isRelevant(file)) {
+                if (file.isFile && now - file.lastModified() > oldThreshold && isRelevant(file)) {
                     fileCount++
+                    FileRepository.junkFiles.add(file)
                 }
 
                 if (file.isDirectory) queue.add(file)
@@ -328,12 +332,18 @@ class MainActivity : Activity() {
     }
 
     private fun isRelevant(file: File): Boolean {
-        val path = file.absolutePath.lowercase()
+        val n = file.name.lowercase()
         val minSize = 1 * 1024 * 1024 // 1 MB
-        return (path.endsWith(".jpg") || path.endsWith(".jpeg") ||
-                path.endsWith(".png") || path.endsWith(".mp4") ||
-                path.endsWith(".mp3") || path.endsWith(".pdf")) &&
-                file.length() > minSize
+
+        return when {
+            n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") -> true
+            n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".avi") -> true
+            n.endsWith(".mp3") || n.endsWith(".wav") -> true
+            n.endsWith(".pdf") || n.endsWith(".doc") || n.endsWith(".docx") || n.endsWith(".txt") -> true
+            n.endsWith(".apk") -> true
+            n.endsWith(".zip") || n.endsWith(".rar") -> true
+            else -> false
+        } && file.length() > minSize
     }
 
     // =================== PERMISSIONS ===================
@@ -397,6 +407,16 @@ class MainActivity : Activity() {
         }
     }
 
+
+    override fun onResume() {
+        super.onResume()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            Environment.isExternalStorageManager()
+        ) {
+            startBackgroundScan()
+        }
+    }
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)

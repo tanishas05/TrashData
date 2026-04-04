@@ -195,9 +195,18 @@ class SecondActivity : Activity() {
         drawerLayout.addView(mainContent)
         drawerLayout.addView(drawerMenu)
         setContentView(drawerLayout)
+        allFiles.clear()
+        allFiles.addAll(FileRepository.junkFiles)
+        buildDuplicateMap()
 
+        applyFilter(initialFilter)
+        showStorageChart()
+
+        if (FileRepository.junkFiles.isEmpty()) {
+            Toast.makeText(this, "Run scan first", Toast.LENGTH_SHORT).show()
+        }
         // ================= LOGIC =================
-        checkPermissionsAndScan() // your function, intact
+        checkPermissionsAndScan()
 
         sortToggle.setOnClickListener {
             sortBySize = !sortBySize
@@ -303,7 +312,7 @@ class SecondActivity : Activity() {
                 scannedFiles++
 
                 // ✅ Smooth UI update (time-based)
-                if (System.currentTimeMillis() % 1000 < 50) {
+                if (scannedFiles % 100 == 0) {
                     val percent = if (totalFiles > 0) (scannedFiles * 100) / totalFiles else 0
                     runOnUiThread {
                         progressText.text = "Scanning: $percent%"
@@ -377,9 +386,13 @@ class SecondActivity : Activity() {
 
         pieChart.data = data
         pieChart.setUsePercentValues(true)
+
+// ✅ ADD THESE TWO LINES
+        pieChart.description.isEnabled = false
+        pieChart.legend.isEnabled = true
+
         pieChart.centerText = getTotalStorage()
         pieChart.animateY(1200)
-
         // 🔥 CLICK FILTER
         pieChart.setOnChartValueSelectedListener(object:OnChartValueSelectedListener{
             override fun onValueSelected(e: Entry?, h: Highlight?) {
@@ -482,6 +495,7 @@ class SecondActivity : Activity() {
                 // ✅ CHECKBOX
                 val checkBox = CheckBox(this@SecondActivity)
 
+                checkBox.setOnCheckedChangeListener(null)
                 checkBox.isChecked = selectedFiles.contains(file)
 
                 checkBox.setOnCheckedChangeListener { _, isChecked ->
@@ -508,6 +522,8 @@ class SecondActivity : Activity() {
                         .setMessage("Are you sure you want to delete ${file.name}?")
                         .setPositiveButton("Yes") { _, _ ->
                             file.delete()
+                            allFiles.remove(file)
+                            selectedFiles.remove(file)
                             applyFilter(filterSpinner.selectedItem.toString())
                             Toast.makeText(this@SecondActivity, "File deleted", Toast.LENGTH_SHORT).show()
                         }
