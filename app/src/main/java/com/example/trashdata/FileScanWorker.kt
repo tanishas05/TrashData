@@ -193,6 +193,7 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         cancelScan.set(true)
     }
 
+
     // =================== TOAST HELPER ===================
     private fun sendToast(message: String) {
         Handler(applicationContext.mainLooper).post {
