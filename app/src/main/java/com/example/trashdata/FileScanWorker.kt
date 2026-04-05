@@ -32,7 +32,6 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
     private var totalSize = 0L
 
     override fun doWork(): Result {
-
         if (isScanning.get()) return Result.success()
         isScanning.set(true)
         cancelScan.set(false)
@@ -47,6 +46,10 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
                 oldFileCount,
                 totalSize
             )
+
+            // ✅ SEND COMPLETION BROADCAST
+            val completeIntent = Intent("com.example.trashdata.SCAN_COMPLETE")
+            LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(completeIntent)
 
         } finally {
             isScanning.set(false)
