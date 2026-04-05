@@ -39,15 +39,27 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val summaryText = "Found $count old files\nTotal size: ${formatSize(size)}"
+        val summaryText = """
+🧹 Scan Complete!
+
+Found $count junk files
+Total size: ${formatSize(size)}
+
+Tap to view and clean 
+""".trimIndent()
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Scan Complete")
-            .setContentText("Trash detected")
+            .setContentText("Tap to view junk files")
             .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent) // ✅ CLICK HANDLER
+            .addAction(
+                android.R.drawable.ic_menu_view,
+                "View",
+                pendingIntent
+            )
             .setAutoCancel(true) // ✅ disappears when tapped
             .build()
 

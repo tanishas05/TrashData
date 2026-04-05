@@ -415,12 +415,26 @@ class MainActivity : Activity() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val bigText = """
+🧹 Scan Complete!
+
+$message
+
+Tap to view and clean 🚀
+""".trimIndent()
+
         val builder = NotificationCompat.Builder(this, "trashdata_channel")
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("TrashData Alert")
-            .setContentText(message)
+            .setContentTitle("Scan Complete ✅")
+            .setContentText("Tap to view junk files")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText)) // ⭐ BIG NOTIF
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent) // ⭐ THIS IS THE FIX
+            .setContentIntent(pendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_view,
+                "View",
+                pendingIntent
+            ) // ⭐ BUTTON
             .setAutoCancel(true)
 
         val manager = NotificationManagerCompat.from(this)
