@@ -32,15 +32,8 @@ import android.view.View
 import android.view.MotionEvent
 import android.util.TypedValue
 
-// =================== SCAN FLAGS ===================
-object FileScanWorkerFlags {
-    val isScanning = java.util.concurrent.atomic.AtomicBoolean(false)
-    val cancelScan = java.util.concurrent.atomic.AtomicBoolean(false)
-}
 
-object FileRepository {
-    val junkFiles = mutableListOf<File>()
-}
+
 
 class MainActivity : Activity() {
 
@@ -137,7 +130,7 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#4A90E2"))
             textSize = 14f
             setOnClickListener {
-                FileScanWorkerFlags.cancelScan.set(true)
+                FileScanWorker.cancelScan.set(true)
                 scanning = false
                 statusText.text = "Scan canceled"
                 progressBar.visibility = ProgressBar.GONE
@@ -391,8 +384,8 @@ class MainActivity : Activity() {
     private fun startScan() {
         scanning = true
         fileCount = 0
-        FileRepository.junkFiles.clear()
-        FileScanWorkerFlags.cancelScan.set(false)
+        FileRepository.clear()
+        FileScanWorker.cancelScan.set(false)
 
         statusText.text = "Scanning..."
         progressBar.visibility = ProgressBar.VISIBLE
@@ -404,7 +397,8 @@ class MainActivity : Activity() {
             }
 
             runOnUiThread {
-                if (!FileScanWorkerFlags.cancelScan.get()) {
+                if (!FileScanWorker.cancelScan.get()) {
+                    FileRepository.buildDuplicateMap()
                     statusText.text = "Scan Complete"
                     Toast.makeText(this, "Scan complete: $fileCount junk files", Toast.LENGTH_SHORT).show()
                     showNotification("Scan complete. $fileCount junk files found.")
@@ -423,7 +417,7 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val oldThreshold = 15 * 60 * 1000L // 15 minutes
 
-        while (queue.isNotEmpty() && !FileScanWorkerFlags.cancelScan.get()) {
+        while (queue.isNotEmpty() && !FileScanWorker.cancelScan.get()) {
             val dir = queue.removeFirst()
             if (dir.absolutePath.contains("/Android")) continue
             val files = try {
@@ -434,9 +428,9 @@ class MainActivity : Activity() {
             } ?: continue
 
             for (file in files) {
-                if (FileScanWorkerFlags.cancelScan.get()) return
+                if (FileScanWorker.cancelScan.get()) return
 
-                if (file.isFile && now - file.lastModified() > oldThreshold && isRelevant(file)) {
+                if (file.isFile && now - file.lastModified() > oldThreshold && FileFilters.isRelevant(file)) {
                     fileCount++
                     FileRepository.junkFiles.add(file)
                 }
@@ -447,20 +441,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun isRelevant(file: File): Boolean {
-        val n = file.name.lowercase()
-        val minSize = 1 * 1024 * 1024 // 1 MB
-
-        return when {
-            n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") -> true
-            n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".avi") -> true
-            n.endsWith(".mp3") || n.endsWith(".wav") -> true
-            n.endsWith(".pdf") || n.endsWith(".doc") || n.endsWith(".docx") || n.endsWith(".txt") -> true
-            n.endsWith(".apk") -> true
-            n.endsWith(".zip") || n.endsWith(".rar") -> true
-            else -> false
-        } && file.length() > minSize
-    }
 
     // =================== PERMISSIONS ===================
     private fun requestAllFilesPermission() {

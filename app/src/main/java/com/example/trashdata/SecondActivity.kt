@@ -40,8 +40,7 @@ class SecondActivity : Activity() {
     private lateinit var progressBar: ProgressBar
     private val allFiles = mutableListOf<File>()
     private val displayFiles = mutableListOf<File>()
-    private val duplicateMap = HashMap<String, MutableList<File>>()
-    private val fileHashMap = HashMap<File, String>()
+
     private val selectedFiles = mutableSetOf<File>()
     private var scannedFiles = 0
     private var totalFiles = 0
@@ -229,19 +228,13 @@ class SecondActivity : Activity() {
         drawerLayout.addView(drawerMenu)
         setContentView(drawerLayout)
 
-        allFiles.clear()
-        allFiles.addAll(FileRepository.junkFiles)
-        buildDuplicateMap()
-
-        applyFilter(initialFilter)
+        loadData()
         showStorageChart()
 
         if (FileRepository.junkFiles.isEmpty()) {
             Toast.makeText(this, "Run scan first", Toast.LENGTH_SHORT).show()
         }
 
-        // ================= LOGIC =================
-        checkPermissionsAndScan()
 
         sortToggle.setOnClickListener {
             sortBySize = !sortBySize
@@ -266,22 +259,6 @@ class SecondActivity : Activity() {
         }
     }
 
-    private fun checkPermissionsAndScan() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                requestAllFilesPermission()
-            } else {
-                scanFiles()
-            }
-        } else {
-            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE), 100)
-            } else {
-                scanFiles()
-            }
-        }
-    }
-
     private fun requestAllFilesPermission() {
         Toast.makeText(this, "Please grant full storage access", Toast.LENGTH_SHORT).show()
         val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
@@ -289,79 +266,50 @@ class SecondActivity : Activity() {
         resumedFromSettings = true
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            scanFiles()
+
+        if (requestCode == 100 &&
+            grantResults.isNotEmpty() &&
+            grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            loadData()
         }
     }
 
     override fun onResume() {
         super.onResume()
+
         if (resumedFromSettings) {
             resumedFromSettings = false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
-                scanFiles()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                Environment.isExternalStorageManager()
+            ) {
+                loadData()
+
             } else {
-                Toast.makeText(this, "Permission not granted. Scan cannot proceed.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "Permission not granted. Scan cannot proceed.",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
 
-    private fun scanFiles() {
-        Thread {
-            val root = Environment.getExternalStorageDirectory()
-            totalFiles = countFiles(root)
-            scanRecursive(root)
-            buildDuplicateMap()
+    private fun loadData() {
+        allFiles.clear()
+        allFiles.addAll(FileRepository.junkFiles)
 
-            runOnUiThread {
-                progressText.text = "Scan Complete"
-                progressBar.progress = 100
-                filterSpinner.setSelection((filterSpinner.adapter as ArrayAdapter<String>).getPosition(initialFilter))
-                applyFilter(initialFilter)
-                showStorageChart()
-            }
-        }.start()
+        FileRepository.buildDuplicateMap()
+
+        applyFilter(initialFilter)
     }
-
-    private fun scanRecursive(dir: File) {
-        if (dir.absolutePath.contains("/Android")) return
-        if (!dir.canRead()) return
-
-        val files = try {
-            dir.listFiles()
-        } catch (e: Exception) {
-            null
-        } ?: return
-
-        for (file in files) {
-            if (file.isDirectory) scanRecursive(file)
-            else {
-                allFiles.add(file)
-                scannedFiles++
-                if (scannedFiles % 100 == 0) {
-                    val percent = if (totalFiles > 0) (scannedFiles * 100) / totalFiles else 0
-                    runOnUiThread {
-                        progressText.text = "Scanning: $percent%"
-                        progressBar.progress = percent
-                    }
-                }
-            }
-        }
-    }
-
-    private fun countFiles(dir: File): Int {
-        if (dir.absolutePath.contains("/Android")) return 0
-        val files = dir.listFiles() ?: return 0
-        var count = 0
-        for (f in files) {
-            if (f.isDirectory) count += countFiles(f)
-            else count++
-        }
-        return count
-    }
-
     private fun showStorageChart() {
         var images = 0f; var videos = 0f; var audio = 0f
         var documents = 0f; var apk = 0f; var archives = 0f; var others = 0f
@@ -448,50 +396,18 @@ class SecondActivity : Activity() {
         return formatSize(total)
     }
 
-    private fun buildDuplicateMap() {
-        for (f in allFiles) {
-            if (f.length() < 1024 * 1024) continue
-            val h = getFileHash(f)
-            if (h.isNotEmpty()) {
-                fileHashMap[f] = h
-                duplicateMap.getOrPut(h) { mutableListOf() }.add(f)
-            }
-        }
-    }
-
-    private fun getFileHash(file: File): String {
-        return try {
-            val d = java.security.MessageDigest.getInstance("MD5")
-            val b = ByteArray(1024)
-            val i = file.inputStream()
-            var r: Int
-            while (i.read(b).also { r = it } != -1) d.update(b, 0, r)
-            d.digest().joinToString("") { "%02x".format(it) }
-        } catch (e: Exception) { "" }
-    }
-
     private fun applyFilter(type: String) {
+
+        val filtered = FileFilters.filterFiles(
+            allFiles,
+            type,
+            FileRepository.duplicateMap,
+            FileRepository.fileHashMap,
+            sortBySize
+        )
+
         displayFiles.clear()
-        val now = System.currentTimeMillis()
-        val oldThreshold = 15 * 60 * 1000L // 15 minutes
-        val recentThreshold = 15 * 60 * 1000L
-        val minSize = 5 * 1024 * 1024L
-
-        for (f in allFiles) {
-            when (type) {
-                "All Files" -> displayFiles.add(f)
-                "Duplicate Files" -> {
-                    val h = fileHashMap[f] ?: ""
-                    if (duplicateMap[h]?.size ?: 0 > 1) displayFiles.add(f)
-                }
-                "Old Files" -> if (now - f.lastModified() > oldThreshold) displayFiles.add(f)
-                "Recent Files" -> if (now - f.lastModified() <= recentThreshold) displayFiles.add(f)
-                "Large Files" -> if (f.length() >= minSize) displayFiles.add(f)
-            }
-        }
-
-        if (sortBySize) displayFiles.sortByDescending { it.length() }
-        else displayFiles.sortByDescending { it.lastModified() }
+        displayFiles.addAll(filtered)
 
         fileCount.text = "${displayFiles.size} files"
         showFiles(displayFiles)

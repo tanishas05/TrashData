@@ -38,7 +38,7 @@ object FileRepository {
     }
 
     // Generate MD5 hash for a file
-    private fun getFileHash(file: File): String {
+    fun getFileHash(file: File): String {
         return try {
             val digest = java.security.MessageDigest.getInstance("MD5")
             val buffer = ByteArray(1024)
