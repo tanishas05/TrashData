@@ -28,6 +28,9 @@ import android.app.NotificationManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import android.app.PendingIntent
+import android.view.View
+import android.view.MotionEvent
+import android.util.TypedValue
 
 // =================== SCAN FLAGS ===================
 object FileScanWorkerFlags {
@@ -38,12 +41,14 @@ object FileScanWorkerFlags {
 object FileRepository {
     val junkFiles = mutableListOf<File>()
 }
+
 class MainActivity : Activity() {
 
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var statusText: TextView
     private lateinit var counterText: TextView
     private lateinit var progressBar: ProgressBar
+    lateinit var scanStatus: TextView
 
     private var scanning = false
     private var fileCount = 0
@@ -67,52 +72,69 @@ class MainActivity : Activity() {
         // ================= HEADER =================
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#2F80ED"))
-            setPadding(40, 100, 40, 100)
-            gravity = Gravity.CENTER
+            setBackgroundColor(Color.WHITE)
+            setPadding(40, 80, 40, 80)
+            elevation = 8f
         }
+
+// 👉 FIRST define all views
 
         val hamburger = TextView(this).apply {
             text = "☰"
             textSize = 28f
-            setTextColor(Color.WHITE)
+            setTextColor(Color.parseColor("#1A1A2E"))
             setTypeface(null, Typeface.BOLD)
             setOnClickListener { drawerLayout.openDrawer(GravityCompat.START) }
         }
-        header.addView(hamburger, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { gravity = Gravity.START })
 
         val title = TextView(this).apply {
             text = "TrashData Cleaner"
-            setTextColor(Color.WHITE)
+            setTextColor(Color.parseColor("#1A1A2E"))
             textSize = 22f
             setTypeface(null, Typeface.BOLD)
         }
 
         val subtitle = TextView(this).apply {
             text = "Junk Files"
-            setTextColor(Color.WHITE)
+            setTextColor(Color.parseColor("#6B7280"))
         }
 
         val cleanBtn = TextView(this).apply {
             text = "CLEAN"
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 18f
-            background = GradientDrawable().apply {
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(
+                    Color.parseColor("#4A90E2"),
+                    Color.parseColor("#6C5CE7")
+                )
+            ).apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#4DA3FF"))
             }
-            layoutParams = LinearLayout.LayoutParams(300, 300).apply { setMargins(0, 40, 0, 0) }
+            elevation = 20f
             setOnClickListener { startScan() }
+            setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        v.scaleX = 0.9f
+                        v.scaleY = 0.9f
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        v.scaleX = 1f
+                        v.scaleY = 1f
+                    }
+                }
+                false
+            }
         }
 
         val cancelBtn = TextView(this).apply {
             text = "CANCEL"
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(Color.parseColor("#4A90E2"))
             textSize = 14f
             setOnClickListener {
                 FileScanWorkerFlags.cancelScan.set(true)
@@ -123,24 +145,83 @@ class MainActivity : Activity() {
             }
         }
 
-        header.addView(title)
-        header.addView(subtitle)
-        header.addView(cleanBtn)
-        header.addView(cancelBtn)
+
+// 👉 NOW add them with proper alignment
+
+// Hamburger (LEFT)
+        header.addView(hamburger, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.START
+        })
+
+// Title (CENTER)
+        header.addView(title, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            topMargin = 20
+        })
+
+// Subtitle (CENTER)
+        header.addView(subtitle, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
+
+// CLEAN button (CENTER)
+        header.addView(cleanBtn, LinearLayout.LayoutParams(320, 320).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            topMargin = 40
+        })
+
+// CANCEL (CENTER)
+        header.addView(cancelBtn, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+        })
 
         // ================= CONTENT =================
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(30, 30, 30, 30)
+            setBackgroundColor(Color.parseColor("#F5F6FA"))    // UI: light grey page bg
         }
 
-        statusText = TextView(this).apply { text = "Status: Idle" }
-        counterText = TextView(this).apply { text = "Junk files found: 0" }
-        progressBar = ProgressBar(this).apply { visibility = ProgressBar.GONE }
+        statusText = TextView(this).apply {
+            text = "Status: Idle"
+            textSize = 16f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#1A1A2E"))          // UI: dark text
+        }
 
+        counterText = TextView(this).apply {
+            text = "Junk files found: 0"
+            textSize = 14f
+            setTextColor(Color.parseColor("#6B7280"))          // UI: muted text
+        }
+        scanStatus = TextView(this).apply {
+            text = ""
+            textSize = 14f
+            setTextColor(Color.parseColor("#6B7280"))
+            gravity = Gravity.CENTER
+        }
+
+        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+        }
         container.addView(statusText)
         container.addView(counterText)
         container.addView(progressBar)
+        container.addView(scanStatus)
 
         // Grid of items
         val grid = GridLayout(this).apply {
@@ -158,25 +239,36 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(40, 40, 40, 40)
+                background = GradientDrawable().apply {
+                    cornerRadius = 30f
+                    setColor(Color.WHITE)                      // UI: white card
+                    setStroke(2, Color.parseColor("#E5E7EB"))  // UI: subtle border
+                }
+                elevation = 10f                                // UI: lighter shadow
+                val typedValue = TypedValue()
+                theme.resolveAttribute(android.R.attr.selectableItemBackground, typedValue, true)
+                foreground = getDrawable(typedValue.resourceId)
                 layoutParams = GridLayout.LayoutParams().apply {
                     width = 0
                     columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                    setMargins(30, 30, 30, 30)
                 }
-
                 addView(TextView(this@MainActivity).apply {
                     this.text = icon
-                    textSize = 36f
+                    textSize = 48f
                     gravity = Gravity.CENTER
                 })
                 addView(TextView(this@MainActivity).apply {
                     this.text = text
+                    textSize = 14f
+                    setTypeface(null, Typeface.BOLD)
                     gravity = Gravity.CENTER
+                    setTextColor(Color.parseColor("#1A1A2E"))  // UI: dark text
                 })
-
                 setOnClickListener {
                     try { action() }
                     catch (e: Exception) {
-                        Toast.makeText(this@MainActivity, "Action failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -202,7 +294,7 @@ class MainActivity : Activity() {
         // ================= MAIN CONTENT =================
         val mainContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#F5F6FA"))    // UI: light grey bg
             layoutParams = DrawerLayout.LayoutParams(
                 DrawerLayout.LayoutParams.MATCH_PARENT,
                 DrawerLayout.LayoutParams.MATCH_PARENT
@@ -214,31 +306,57 @@ class MainActivity : Activity() {
         // ================= DRAWER MENU =================
         val drawerMenu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.LTGRAY)
+            setBackgroundColor(Color.WHITE)                    // UI: white drawer
             layoutParams = DrawerLayout.LayoutParams(600, DrawerLayout.LayoutParams.MATCH_PARENT).apply {
                 gravity = GravityCompat.START
             }
+            elevation = 16f
         }
 
+        // UI: drawer header strip
+        val drawerHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#4A90E2"))
+            setPadding(40, 120, 40, 40)
+        }
+        drawerHeader.addView(TextView(this).apply {
+            text = "TrashData"
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        })
+        drawerHeader.addView(TextView(this).apply {
+            text = "File Cleaner"
+            textSize = 12f
+            setTextColor(Color.parseColor("#BBDEFB"))
+        })
+        drawerMenu.addView(drawerHeader)
+
         val menuCleaner = TextView(this).apply {
-            text = "Cleaner"
-            setPadding(20, 40, 20, 40)
+            text = "🧹  Cleaner"
+            textSize = 15f
+            setTextColor(Color.parseColor("#1A1A2E"))          // UI: dark text
+            setPadding(40, 40, 40, 40)
             setOnClickListener {
                 Toast.makeText(this@MainActivity, "Cleaner clicked", Toast.LENGTH_SHORT).show()
                 drawerLayout.closeDrawer(GravityCompat.START)
             }
         }
         val menuFiles = TextView(this).apply {
-            text = "Files"
-            setPadding(20, 40, 20, 40)
+            text = "📁  Files"
+            textSize = 15f
+            setTextColor(Color.parseColor("#1A1A2E"))
+            setPadding(40, 40, 40, 40)
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, SecondActivity::class.java))
                 drawerLayout.closeDrawer(GravityCompat.START)
             }
         }
         val menuSettings = TextView(this).apply {
-            text = "Settings"
-            setPadding(20, 40, 20, 40)
+            text = "⚙️  Settings"
+            textSize = 15f
+            setTextColor(Color.parseColor("#1A1A2E"))
+            setPadding(40, 40, 40, 40)
             setOnClickListener {
                 Toast.makeText(this@MainActivity, "Settings clicked", Toast.LENGTH_SHORT).show()
                 drawerLayout.closeDrawer(GravityCompat.START)
@@ -262,7 +380,6 @@ class MainActivity : Activity() {
         }
 
         createNotificationChannel()
-
 
         LocalBroadcastManager.getInstance(this).registerReceiver(
             scanProgressReceiver,
@@ -295,7 +412,7 @@ class MainActivity : Activity() {
                     intent.putExtra("filter", "All Files")
                     startActivity(intent)
                 }
-                progressBar.visibility = ProgressBar.GONE
+                progressBar.visibility = View.GONE
             }
         }.start()
     }
@@ -308,7 +425,6 @@ class MainActivity : Activity() {
 
         while (queue.isNotEmpty() && !FileScanWorkerFlags.cancelScan.get()) {
             val dir = queue.removeFirst()
-// ✅ ADD THIS LINE
             if (dir.absolutePath.contains("/Android")) continue
             val files = try {
                 dir.listFiles()
@@ -366,11 +482,9 @@ class MainActivity : Activity() {
                     101
                 )
             } else {
-                // Permission already granted → start scan
                 startBackgroundScan()
             }
         } else {
-            // Pre Android 13 → start scan
             startBackgroundScan()
         }
     }
@@ -378,14 +492,12 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
-        if (requestCode == 101) { // Notification permission
+        if (requestCode == 101) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "Notification permission denied", Toast.LENGTH_SHORT).show()
             }
-
-            // Either way, start background scan now
             startBackgroundScan()
         }
     }
@@ -403,15 +515,12 @@ class MainActivity : Activity() {
     }
 
     private fun showNotification(message: String) {
-
         val intent = Intent(this, SecondActivity::class.java)
         intent.putExtra("filter", "All Files")
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
 
         val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            intent,
+            this, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -427,18 +536,13 @@ Tap to view and clean 🚀
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Scan Complete ✅")
             .setContentText("Tap to view junk files")
-            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText)) // ⭐ BIG NOTIF
+            .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
-            .addAction(
-                android.R.drawable.ic_menu_view,
-                "View",
-                pendingIntent
-            ) // ⭐ BUTTON
+            .addAction(android.R.drawable.ic_menu_view, "View", pendingIntent)
             .setAutoCancel(true)
 
         val manager = NotificationManagerCompat.from(this)
-
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
@@ -450,19 +554,17 @@ Tap to view and clean 🚀
     override fun onResume() {
         super.onResume()
 
-        // Check for Storage access first
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                // Ask for storage permission first
                 requestAllFilesPermission()
                 return
             }
         }
 
-        // If storage permission granted, request notification permission
         requestNotificationPermission()
         startBackgroundScan()
     }
+
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)
