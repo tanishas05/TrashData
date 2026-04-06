@@ -4,16 +4,13 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 object FileRepository {
-
-    // =================== FILE STORAGE ===================
-    val junkFiles = mutableListOf<File>()           // All scanned junk files
-    val fileHashMap = mutableMapOf<File, String>()  // Map of file -> hash
+    // FILE STORAGE
+    val junkFiles = mutableListOf<File>()
+    val fileHashMap = mutableMapOf<File, String>()
     val duplicateMap = mutableMapOf<String, MutableList<File>>() // hash -> list of files
-
-    // =================== SCAN FLAGS ===================
+    //  SCAN FLAGS
     val isScanning = AtomicBoolean(false)  // true when scanning is running
     val cancelScan = AtomicBoolean(false)  // set to true to cancel scan
-
     fun clear() {
         junkFiles.clear()
         fileHashMap.clear()
@@ -21,12 +18,10 @@ object FileRepository {
         isScanning.set(false)
         cancelScan.set(false)
     }
-
     // Rebuild duplicate map from existing junkFiles
     fun buildDuplicateMap() {
         fileHashMap.clear()
         duplicateMap.clear()
-
         for (f in junkFiles) {
             if (f.length() < 1024 * 1024) continue // skip files < 1MB
             val h = getFileHash(f)
@@ -36,7 +31,6 @@ object FileRepository {
             }
         }
     }
-
     // Generate MD5 hash for a file
     fun getFileHash(file: File): String {
         return try {

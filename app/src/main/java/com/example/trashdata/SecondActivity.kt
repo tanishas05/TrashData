@@ -2,6 +2,10 @@ package com.example.trashdata
 
 import android.app.Activity
 import android.os.Bundle
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import android.os.Environment
 import androidx.appcompat.app.AlertDialog
 import android.widget.*
@@ -27,7 +31,6 @@ import com.github.mikephil.charting.formatter.PercentFormatter
 import android.provider.Settings
 
 class SecondActivity : Activity() {
-
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var listView: ListView
     private lateinit var filterSpinner: Spinner
@@ -40,14 +43,32 @@ class SecondActivity : Activity() {
     private lateinit var progressBar: ProgressBar
     private val allFiles = mutableListOf<File>()
     private val displayFiles = mutableListOf<File>()
-
     private val selectedFiles = mutableSetOf<File>()
     private var scannedFiles = 0
     private var totalFiles = 0
     private var sortBySize = true
     private var initialFilter: String = "All Files"
-
     private var resumedFromSettings = false
+    private val scanProgressReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val scannedFiles = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
+            val totalFiles = intent?.getIntExtra(FileScanWorker.EXTRA_TOTAL_FILES, 1) ?: 1
+            val percent = if (totalFiles > 0) (scannedFiles * 100 / totalFiles) else 0
+
+            runOnUiThread {
+                progressText.text = "Scanning... $percent%"
+                progressBar.visibility = View.VISIBLE
+                progressBar.max = 100
+                progressBar.progress = percent
+
+                if (percent >= 100) {
+                    progressText.text = "Scan Complete ✅"
+                    progressBar.visibility = View.GONE
+                    loadData()
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -228,6 +249,10 @@ class SecondActivity : Activity() {
         drawerLayout.addView(drawerMenu)
         setContentView(drawerLayout)
 
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            scanProgressReceiver,
+            IntentFilter(FileScanWorker.ACTION_PROGRESS)
+        )
         loadData()
         showStorageChart()
 
@@ -281,17 +306,25 @@ class SecondActivity : Activity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)
+    }
     override fun onResume() {
         super.onResume()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            !Environment.isExternalStorageManager()
+        ) {
+            requestAllFilesPermission()
+            return
+        }
 
         if (resumedFromSettings) {
             resumedFromSettings = false
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
-                Environment.isExternalStorageManager()
-            ) {
+            if (Environment.isExternalStorageManager()) {
                 loadData()
-
             } else {
                 Toast.makeText(
                     this,
@@ -301,7 +334,6 @@ class SecondActivity : Activity() {
             }
         }
     }
-
     private fun loadData() {
         allFiles.clear()
         allFiles.addAll(FileRepository.junkFiles)
@@ -395,7 +427,6 @@ class SecondActivity : Activity() {
         for (f in allFiles) total += f.length()
         return formatSize(total)
     }
-
     private fun applyFilter(type: String) {
 
         val filtered = FileFilters.filterFiles(
@@ -412,7 +443,6 @@ class SecondActivity : Activity() {
         fileCount.text = "${displayFiles.size} files"
         showFiles(displayFiles)
     }
-
     private fun showFiles(files: List<File>) {
         val adapter = object : BaseAdapter() {
             override fun getCount(): Int = files.size

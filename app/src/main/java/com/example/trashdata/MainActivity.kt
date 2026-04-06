@@ -1,6 +1,7 @@
 package com.example.trashdata
 
 import android.app.Activity
+import androidx.work.OneTimeWorkRequestBuilder
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -32,36 +33,39 @@ import android.view.View
 import android.view.MotionEvent
 import android.util.TypedValue
 
-
-
-
 class MainActivity : Activity() {
-
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var statusText: TextView
     private lateinit var counterText: TextView
     private lateinit var progressBar: ProgressBar
     lateinit var scanStatus: TextView
-
     private var scanning = false
     private var fileCount = 0
-
     // BroadcastReceiver for background scan progress
     private val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val scannedFiles = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
+            val totalFiles = intent?.getIntExtra(FileScanWorker.EXTRA_TOTAL_FILES, 1) ?: 1
+
+            val percent = if (totalFiles > 0) (scannedFiles * 100 / totalFiles) else 0
+
             runOnUiThread {
                 counterText.text = "Junk files found: $scannedFiles"
-                statusText.text = "Scanning (background)..."
+                statusText.text = "Scanning... ($percent%)"
+                progressBar.visibility = View.VISIBLE
+                progressBar.max = 100
+                progressBar.progress = percent
+
+                if (percent >= 100) {
+                    statusText.text = "Scan Complete ✅"
+                    progressBar.visibility = View.GONE
+                }
             }
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         drawerLayout = DrawerLayout(this)
-
         // ================= HEADER =================
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -305,7 +309,6 @@ class MainActivity : Activity() {
             }
             elevation = 16f
         }
-
         // UI: drawer header strip
         val drawerHeader = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -324,7 +327,6 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor("#BBDEFB"))
         })
         drawerMenu.addView(drawerHeader)
-
         val menuCleaner = TextView(this).apply {
             text = "🧹  Cleaner"
             textSize = 15f
@@ -355,32 +357,25 @@ class MainActivity : Activity() {
                 drawerLayout.closeDrawer(GravityCompat.START)
             }
         }
-
         drawerMenu.addView(menuCleaner)
         drawerMenu.addView(menuFiles)
         drawerMenu.addView(menuSettings)
-
         // ================= ADD TO DRAWER =================
         drawerLayout.addView(mainContent)
         drawerLayout.addView(drawerMenu)
         setContentView(drawerLayout)
-
         // ================= PERMISSIONS & NOTIFICATIONS =================
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             requestAllFilesPermission()
         } else {
             startBackgroundScan()
         }
-
         createNotificationChannel()
-
         LocalBroadcastManager.getInstance(this).registerReceiver(
             scanProgressReceiver,
             IntentFilter(FileScanWorker.ACTION_PROGRESS)
         )
     }
-
-    // =================== MANUAL SCAN ===================
     private fun startScan() {
         scanning = true
         fileCount = 0
@@ -388,61 +383,13 @@ class MainActivity : Activity() {
         FileScanWorker.cancelScan.set(false)
 
         statusText.text = "Scanning..."
-        progressBar.visibility = ProgressBar.VISIBLE
+        progressBar.visibility = View.VISIBLE
+        progressBar.progress = 0
 
-        Thread {
-            val storageDir = Environment.getExternalStorageDirectory()
-            scanIterative(storageDir) { scannedFiles ->
-                runOnUiThread { counterText.text = "Junk files found: $scannedFiles" }
-            }
-
-            runOnUiThread {
-                if (!FileScanWorker.cancelScan.get()) {
-                    FileRepository.buildDuplicateMap()
-                    statusText.text = "Scan Complete"
-                    Toast.makeText(this, "Scan complete: $fileCount junk files", Toast.LENGTH_SHORT).show()
-                    showNotification("Scan complete. $fileCount junk files found.")
-                    val intent = Intent(this, SecondActivity::class.java)
-                    intent.putExtra("filter", "All Files")
-                    startActivity(intent)
-                }
-                progressBar.visibility = View.GONE
-            }
-        }.start()
+        val workRequest = OneTimeWorkRequestBuilder<FileScanWorker>().build()
+        WorkManager.getInstance(this).enqueue(workRequest)
     }
-
-    private fun scanIterative(root: File, onProgress: (Int) -> Unit) {
-        val queue = ArrayDeque<File>()
-        queue.add(root)
-        val now = System.currentTimeMillis()
-        val oldThreshold = 15 * 60 * 1000L // 15 minutes
-
-        while (queue.isNotEmpty() && !FileScanWorker.cancelScan.get()) {
-            val dir = queue.removeFirst()
-            if (dir.absolutePath.contains("/Android")) continue
-            val files = try {
-                dir.listFiles()
-            } catch (e: SecurityException) {
-                runOnUiThread { Toast.makeText(this, "Cannot access ${dir.path}", Toast.LENGTH_SHORT).show() }
-                continue
-            } ?: continue
-
-            for (file in files) {
-                if (FileScanWorker.cancelScan.get()) return
-
-                if (file.isFile && now - file.lastModified() > oldThreshold && FileFilters.isRelevant(file)) {
-                    fileCount++
-                    FileRepository.junkFiles.add(file)
-                }
-
-                if (file.isDirectory) queue.add(file)
-            }
-            onProgress(fileCount)
-        }
-    }
-
-
-    // =================== PERMISSIONS ===================
+    // PERMISSIONS
     private fun requestAllFilesPermission() {
         try {
             val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
@@ -453,7 +400,6 @@ class MainActivity : Activity() {
             startActivity(intent)
         }
     }
-
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -468,7 +414,6 @@ class MainActivity : Activity() {
             startBackgroundScan()
         }
     }
-
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
@@ -481,7 +426,6 @@ class MainActivity : Activity() {
             startBackgroundScan()
         }
     }
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -493,7 +437,6 @@ class MainActivity : Activity() {
             manager.createNotificationChannel(channel)
         }
     }
-
     private fun showNotification(message: String) {
         val intent = Intent(this, SecondActivity::class.java)
         intent.putExtra("filter", "All Files")
@@ -530,7 +473,6 @@ Tap to view and clean 🚀
             manager.notify(1, builder.build())
         }
     }
-
     override fun onResume() {
         super.onResume()
 
@@ -544,12 +486,10 @@ Tap to view and clean 🚀
         requestNotificationPermission()
         startBackgroundScan()
     }
-
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)
     }
-
     private fun startBackgroundScan() {
         val workRequest =
             PeriodicWorkRequestBuilder<FileScanWorker>(15, TimeUnit.MINUTES)
