@@ -4,13 +4,11 @@ import java.io.File
 import java.util.ArrayDeque
 
 object FileScanner {
-
     interface ScanCallback {
         fun onFileFound(file: File)
         fun onProgress(count: Int, totalSize: Long)
         fun isCancelled(): Boolean
     }
-
     fun scan(root: File, callback: ScanCallback) {
         val queue = ArrayDeque<File>()
         queue.add(root)
@@ -75,4 +73,3 @@ object FileScanner {
         return total
     }
 }
-

@@ -70,7 +70,6 @@ Tap to view and clean
         val kb = size / 1024
         val mb = kb / 1024
         val gb = mb / 1024
-
         return when {
             gb > 0 -> "$gb GB"
             mb > 0 -> "$mb MB"

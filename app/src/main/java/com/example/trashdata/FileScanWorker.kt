@@ -120,12 +120,11 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         }
     }
 
-    // =================== CANCEL SCAN ===================
+    // CANCEL SCAN
     fun stopScan() {
         cancelScan.set(true)
     }
-
-    // =================== TOAST HELPER ===================
+    // TOAST HELPER
     private fun sendToast(message: String) {
         Handler(applicationContext.mainLooper).post {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()

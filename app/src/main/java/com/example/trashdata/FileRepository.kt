@@ -23,7 +23,7 @@ object FileRepository {
         fileHashMap.clear()
         duplicateMap.clear()
         for (f in junkFiles) {
-            if (f.length() < 1024 * 1024) continue // skip files < 1MB
+            if (f.length() < 100 * 1024) continue
             val h = getFileHash(f)
             if (h.isNotEmpty()) {
                 fileHashMap[f] = h
