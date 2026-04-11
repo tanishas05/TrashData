@@ -12,6 +12,9 @@
     <!-- Permission for showing notifications (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- ✅ Required for Gemini API calls -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="TrashData"
         android:icon="@mipmap/ic_launcher"
@@ -32,7 +35,6 @@
         <activity
             android:name=".SecondActivity"
             android:exported="false"/>
-
 
         <provider
             android:name="androidx.core.content.FileProvider"

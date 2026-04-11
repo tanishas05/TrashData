@@ -29,6 +29,8 @@ import com.github.mikephil.charting.listener.OnChartValueSelectedListener
 import com.github.mikephil.charting.highlight.Highlight
 import com.github.mikephil.charting.formatter.PercentFormatter
 import android.provider.Settings
+import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
 
 class SecondActivity : Activity() {
     private lateinit var drawerLayout: DrawerLayout
@@ -41,26 +43,30 @@ class SecondActivity : Activity() {
     private lateinit var pieChart: PieChart
     private lateinit var sortToggle: Button
     private lateinit var progressBar: ProgressBar
-    private val allFiles = mutableListOf<File>()
-    private val displayFiles = mutableListOf<File>()
+
+    private val allFiles      = mutableListOf<File>()
+    private val displayFiles  = mutableListOf<File>()
     private val selectedFiles = mutableSetOf<File>()
-    private var scannedFiles = 0
-    private var totalFiles = 0
-    private var sortBySize = true
-    private var initialFilter: String = "All Files"
+
+    // ── AI keyword cache: file path → list of tags ──────────────────────────
+    private val keywordCache = ConcurrentHashMap<String, List<String>>()
+    // Thread pool for Gemini calls (max 3 concurrent)
+    private val aiExecutor = Executors.newFixedThreadPool(3)
+
+    private var sortBySize      = true
+    private var initialFilter   = "All Files"
     private var resumedFromSettings = false
+
     private val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val scannedFiles = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
-            val totalFiles = intent?.getIntExtra(FileScanWorker.EXTRA_TOTAL_FILES, 1) ?: 1
-            val percent = if (totalFiles > 0) (scannedFiles * 100 / totalFiles) else 0
-
+            val scanned = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
+            val total   = intent?.getIntExtra(FileScanWorker.EXTRA_TOTAL_FILES, 1) ?: 1
+            val percent = if (total > 0) (scanned * 100 / total) else 0
             runOnUiThread {
                 progressText.text = "Scanning... $percent%"
                 progressBar.visibility = View.VISIBLE
                 progressBar.max = 100
                 progressBar.progress = percent
-
                 if (percent >= 100) {
                     progressText.text = "Scan Complete ✅"
                     progressBar.visibility = View.GONE
@@ -72,24 +78,21 @@ class SecondActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         initialFilter = intent.getStringExtra("filter") ?: "All Files"
+        drawerLayout  = DrawerLayout(this)
 
-        drawerLayout = DrawerLayout(this)
-
-        // ================= HEADER =================
+        // ── HEADER ──────────────────────────────────────────────────────────
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)                    // UI: white instead of blue
+            setBackgroundColor(Color.WHITE)
             setPadding(40, 100, 40, 40)
-            gravity = Gravity.CENTER
-            elevation = 8f                                     // UI: subtle shadow
+            gravity   = Gravity.CENTER
+            elevation = 8f
         }
 
         val hamburger = TextView(this).apply {
-            text = "☰"
-            textSize = 28f
-            setTextColor(Color.parseColor("#1A1A2E"))          // UI: dark icon
+            text = "☰"; textSize = 28f
+            setTextColor(Color.parseColor("#1A1A2E"))
             setTypeface(null, Typeface.BOLD)
             setOnClickListener { drawerLayout.openDrawer(GravityCompat.START) }
         }
@@ -100,73 +103,64 @@ class SecondActivity : Activity() {
 
         val title = TextView(this).apply {
             text = "Files Cleaner"
-            setTextColor(Color.parseColor("#1A1A2E"))          // UI: dark text
-            textSize = 22f
-            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#1A1A2E"))
+            textSize = 22f; setTypeface(null, Typeface.BOLD)
         }
+        fileCount    = TextView(this).apply { setTextColor(Color.parseColor("#6B7280")) }
+        progressText = TextView(this).apply { setTextColor(Color.parseColor("#4A90E2")) }
+        progressBar  = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+            .apply { max = 100 }
 
-        fileCount = TextView(this).apply {
-            setTextColor(Color.parseColor("#6B7280"))          // UI: muted grey
-        }
-        progressText = TextView(this).apply {
-            setTextColor(Color.parseColor("#4A90E2"))          // UI: accent blue
-        }
-        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
+        header.addView(title); header.addView(fileCount)
+        header.addView(progressText); header.addView(progressBar)
 
-        header.addView(title)
-        header.addView(fileCount)
-        header.addView(progressText)
-        header.addView(progressBar)
-
-        // ================= CONTENT =================
+        // ── CONTENT ─────────────────────────────────────────────────────────
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
-            setBackgroundColor(Color.parseColor("#F5F6FA"))    // UI: light grey page bg
+            setBackgroundColor(Color.parseColor("#F5F6FA"))
         }
 
         searchBar = EditText(this).apply {
             hint = "Search files..."
-            setHintTextColor(Color.parseColor("#9CA3AF"))      // UI: lighter hint
-            setTextColor(Color.parseColor("#1A1A2E"))          // UI: dark input text
+            setHintTextColor(Color.parseColor("#9CA3AF"))
+            setTextColor(Color.parseColor("#1A1A2E"))
             background = GradientDrawable().apply {
-                cornerRadius = 60f
-                setColor(Color.WHITE)                          // UI: white search bg
-                setStroke(2, Color.parseColor("#E5E7EB"))      // UI: light border
+                cornerRadius = 60f; setColor(Color.WHITE)
+                setStroke(2, Color.parseColor("#E5E7EB"))
             }
             setPadding(30, 20, 30, 20)
         }
 
         filterSpinner = Spinner(this).apply {
             val filters = arrayOf("All Files", "Duplicate Files", "Old Files", "Large Files")
-            adapter = ArrayAdapter(this@SecondActivity, android.R.layout.simple_spinner_dropdown_item, filters)
+            adapter = ArrayAdapter(this@SecondActivity,
+                android.R.layout.simple_spinner_dropdown_item, filters)
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                    applyFilter(parent.getItemAtPosition(position).toString())
+                override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) {
+                    applyFilter(p.getItemAtPosition(pos).toString())
                 }
-                override fun onNothingSelected(parent: AdapterView<*>) {}
+                override fun onNothingSelected(p: AdapterView<*>) {}
             }
         }
         val spinnerAdapter = filterSpinner.adapter as ArrayAdapter<String>
-        val spinnerPosition = spinnerAdapter.getPosition(initialFilter)
-        if (spinnerPosition >= 0) filterSpinner.setSelection(spinnerPosition)
+        val spinnerPos = spinnerAdapter.getPosition(initialFilter)
+        if (spinnerPos >= 0) filterSpinner.setSelection(spinnerPos)
 
         sortToggle = Button(this).apply {
             text = "Sort: Size"
-            setTextColor(Color.parseColor("#1A1A2E"))          // UI: dark text
-            setBackgroundColor(Color.WHITE)                    // UI: white button
+            setTextColor(Color.parseColor("#1A1A2E"))
+            setBackgroundColor(Color.WHITE)
         }
-
         deleteSelectedBtn = Button(this).apply {
             text = "Delete Selected"
-            setBackgroundColor(Color.parseColor("#FF4757"))    // UI: cleaner red
+            setBackgroundColor(Color.parseColor("#FF4757"))
             setTextColor(Color.WHITE)
         }
-
         pieChart = PieChart(this).apply {
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 600)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 600)
         }
-
         listView = ListView(this)
 
         container.addView(pieChart)
@@ -176,90 +170,72 @@ class SecondActivity : Activity() {
         container.addView(deleteSelectedBtn)
         container.addView(listView)
 
-        // ================= MAIN CONTENT =================
+        // ── MAIN CONTENT ────────────────────────────────────────────────────
         val mainContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F5F6FA"))    // UI: light grey bg
+            setBackgroundColor(Color.parseColor("#F5F6FA"))
+            layoutParams = DrawerLayout.LayoutParams(
+                DrawerLayout.LayoutParams.MATCH_PARENT,
+                DrawerLayout.LayoutParams.MATCH_PARENT)
             addView(header)
-            addView(container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(container, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
 
-        // ================= DRAWER MENU =================
+        // ── DRAWER ──────────────────────────────────────────────────────────
         val drawerMenu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.WHITE)                    // UI: white drawer
-            layoutParams = DrawerLayout.LayoutParams(600, DrawerLayout.LayoutParams.MATCH_PARENT).apply {
-                gravity = GravityCompat.START
-            }
+            setBackgroundColor(Color.WHITE)
+            layoutParams = DrawerLayout.LayoutParams(
+                600, DrawerLayout.LayoutParams.MATCH_PARENT).apply {
+                gravity = GravityCompat.START }
             elevation = 16f
         }
-
-        // UI: blue drawer header strip
         val drawerHeader = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#4A90E2"))
             setPadding(40, 120, 40, 40)
         }
         drawerHeader.addView(TextView(this).apply {
-            text = "TrashData"
-            textSize = 20f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
+            text = "TrashData"; textSize = 20f
+            setTypeface(null, Typeface.BOLD); setTextColor(Color.WHITE)
         })
         drawerHeader.addView(TextView(this).apply {
-            text = "File Cleaner"
-            textSize = 12f
+            text = "File Cleaner"; textSize = 12f
             setTextColor(Color.parseColor("#BBDEFB"))
         })
         drawerMenu.addView(drawerHeader)
 
-        val menuCleaner = TextView(this).apply {
-            text = "🧹  Cleaner"
-            textSize = 15f
-            setTextColor(Color.parseColor("#1A1A2E"))          // UI: dark text
-            setPadding(40, 40, 40, 40)
-            setOnClickListener {
-                startActivity(Intent(this@SecondActivity, MainActivity::class.java))
-                drawerLayout.closeDrawer(GravityCompat.START)
-            }
-        }
-        val menuFiles = TextView(this).apply {
-            text = "📁  Files"
-            textSize = 15f
+        fun drawerItem(label: String, onClick: () -> Unit) = TextView(this).apply {
+            text = label; textSize = 15f
             setTextColor(Color.parseColor("#1A1A2E"))
             setPadding(40, 40, 40, 40)
-            setOnClickListener { drawerLayout.closeDrawer(GravityCompat.START) }
+            setOnClickListener { onClick() }
         }
-        val menuSettings = TextView(this).apply {
-            text = "⚙️  Settings"
-            textSize = 15f
-            setTextColor(Color.parseColor("#1A1A2E"))
-            setPadding(40, 40, 40, 40)
-            setOnClickListener {
-                Toast.makeText(this@SecondActivity, "Settings clicked", Toast.LENGTH_SHORT).show()
-                drawerLayout.closeDrawer(GravityCompat.START)
-            }
-        }
-
-        drawerMenu.addView(menuCleaner)
-        drawerMenu.addView(menuFiles)
-        drawerMenu.addView(menuSettings)
+        drawerMenu.addView(drawerItem("🧹  Cleaner") {
+            startActivity(Intent(this, MainActivity::class.java))
+            drawerLayout.closeDrawer(GravityCompat.START)
+        })
+        drawerMenu.addView(drawerItem("📁  Files") {
+            drawerLayout.closeDrawer(GravityCompat.START)
+        })
+        drawerMenu.addView(drawerItem("⚙️  Settings") {
+            Toast.makeText(this, "Settings clicked", Toast.LENGTH_SHORT).show()
+            drawerLayout.closeDrawer(GravityCompat.START)
+        })
 
         drawerLayout.addView(mainContent)
         drawerLayout.addView(drawerMenu)
         setContentView(drawerLayout)
 
         LocalBroadcastManager.getInstance(this).registerReceiver(
-            scanProgressReceiver,
-            IntentFilter(FileScanWorker.ACTION_PROGRESS)
-        )
+            scanProgressReceiver, IntentFilter(FileScanWorker.ACTION_PROGRESS))
+
         loadData()
         showStorageChart()
 
-        if (FileRepository.junkFiles.isEmpty()) {
+        if (FileRepository.junkFiles.isEmpty())
             Toast.makeText(this, "Run scan first", Toast.LENGTH_SHORT).show()
-        }
-
 
         sortToggle.setOnClickListener {
             sortBySize = !sortBySize
@@ -272,76 +248,59 @@ class SecondActivity : Activity() {
                 val q = s.toString().lowercase()
                 showFiles(displayFiles.filter { it.name.lowercase().contains(q) })
             }
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
         })
 
         deleteSelectedBtn.setOnClickListener {
-            for (file in selectedFiles) if (file.exists()) file.delete()
+            for (f in selectedFiles) if (f.exists()) f.delete()
             Toast.makeText(this, "Deleted ${selectedFiles.size} files", Toast.LENGTH_SHORT).show()
             selectedFiles.clear()
             applyFilter(filterSpinner.selectedItem.toString())
         }
     }
 
+    // ── PERMISSIONS ─────────────────────────────────────────────────────────
     private fun requestAllFilesPermission() {
         Toast.makeText(this, "Please grant full storage access", Toast.LENGTH_SHORT).show()
-        val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-        startActivity(intent)
+        startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
         resumedFromSettings = true
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (requestCode == 100 &&
-            grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) {
+    override fun onRequestPermissionsResult(rc: Int, perms: Array<out String>, results: IntArray) {
+        super.onRequestPermissionsResult(rc, perms, results)
+        if (rc == 100 && results.isNotEmpty() && results[0] == PackageManager.PERMISSION_GRANTED)
             loadData()
-        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)
+        aiExecutor.shutdownNow()
     }
+
     override fun onResume() {
         super.onResume()
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
-            !Environment.isExternalStorageManager()
-        ) {
-            requestAllFilesPermission()
-            return
+            !Environment.isExternalStorageManager()) {
+            requestAllFilesPermission(); return
         }
-
         if (resumedFromSettings) {
             resumedFromSettings = false
-
-            if (Environment.isExternalStorageManager()) {
-                loadData()
-            } else {
-                Toast.makeText(
-                    this,
-                    "Permission not granted. Scan cannot proceed.",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+            if (Environment.isExternalStorageManager()) loadData()
+            else Toast.makeText(this, "Permission not granted.", Toast.LENGTH_SHORT).show()
         }
     }
+
+    // ── DATA ────────────────────────────────────────────────────────────────
     private fun loadData() {
         allFiles.clear()
         allFiles.addAll(FileRepository.junkFiles)
-
         FileRepository.buildDuplicateMap()
-
         applyFilter(initialFilter)
     }
+
+    // ── PIE CHART ───────────────────────────────────────────────────────────
     private fun showStorageChart() {
         var images = 0f; var videos = 0f; var audio = 0f
         var documents = 0f; var apk = 0f; var archives = 0f; var others = 0f
@@ -349,53 +308,40 @@ class SecondActivity : Activity() {
         for (f in allFiles) {
             val n = f.name.lowercase()
             when {
-                n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") ->
-                    images += f.length().toFloat()
-                n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".avi") ->
-                    videos += f.length().toFloat()
-                n.endsWith(".mp3") || n.endsWith(".wav") ->
-                    audio += f.length().toFloat()
-                n.endsWith(".pdf") || n.endsWith(".doc") || n.endsWith(".docx") || n.endsWith(".txt") ->
-                    documents += f.length().toFloat()
-                n.endsWith(".apk") ->
-                    apk += f.length().toFloat()
-                n.endsWith(".zip") || n.endsWith(".rar") ->
-                    archives += f.length().toFloat()
-                else ->
-                    others += f.length().toFloat()
+                n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".png") -> images  += f.length()
+                n.endsWith(".mp4")||n.endsWith(".mkv")||n.endsWith(".avi")  -> videos  += f.length()
+                n.endsWith(".mp3")||n.endsWith(".wav")                      -> audio   += f.length()
+                n.endsWith(".pdf")||n.endsWith(".doc")||
+                        n.endsWith(".docx")||n.endsWith(".txt")                     -> documents += f.length()
+                n.endsWith(".apk")                                          -> apk     += f.length()
+                n.endsWith(".zip")||n.endsWith(".rar")                      -> archives+= f.length()
+                else                                                        -> others  += f.length()
             }
         }
 
         val entries = arrayListOf<PieEntry>()
         if (documents > 0) entries.add(PieEntry(documents, "Documents"))
-        if (apk > 0) entries.add(PieEntry(apk, "APK"))
-        if (archives > 0) entries.add(PieEntry(archives, "Archives"))
-        if (videos > 0) entries.add(PieEntry(videos, "Videos"))
-        if (images > 0) entries.add(PieEntry(images, "Images"))
-        if (audio > 0) entries.add(PieEntry(audio, "Audio"))
-        if (others > 0) entries.add(PieEntry(others, "Others"))
+        if (apk      > 0) entries.add(PieEntry(apk,       "APK"))
+        if (archives > 0) entries.add(PieEntry(archives,  "Archives"))
+        if (videos   > 0) entries.add(PieEntry(videos,    "Videos"))
+        if (images   > 0) entries.add(PieEntry(images,    "Images"))
+        if (audio    > 0) entries.add(PieEntry(audio,     "Audio"))
+        if (others   > 0) entries.add(PieEntry(others,    "Others"))
 
-        val dataSet = PieDataSet(entries, "")
-        // UI: cleaner chart colours
-        dataSet.colors = listOf(
-            Color.parseColor("#4A90E2"),
-            Color.parseColor("#F5A623"),
-            Color.parseColor("#7ED321"),
-            Color.parseColor("#9B59B6"),
-            Color.parseColor("#E74C3C"),
-            Color.parseColor("#1ABC9C"),
-            Color.parseColor("#BDC3C7")
-        )
+        val dataSet = PieDataSet(entries, "").apply {
+            colors = listOf(
+                Color.parseColor("#4A90E2"), Color.parseColor("#F5A623"),
+                Color.parseColor("#7ED321"), Color.parseColor("#9B59B6"),
+                Color.parseColor("#E74C3C"), Color.parseColor("#1ABC9C"),
+                Color.parseColor("#BDC3C7"))
+        }
+        val data = PieData(dataSet).apply { setValueFormatter(PercentFormatter(pieChart)) }
 
-        val data = PieData(dataSet)
-        data.setValueFormatter(PercentFormatter(pieChart))
-
-        pieChart.data = data
-        pieChart.setUsePercentValues(true)
-        pieChart.description.isEnabled = false
-        pieChart.legend.isEnabled = true
-        pieChart.centerText = getTotalStorage()
-        pieChart.animateY(1200)
+        pieChart.apply {
+            this.data = data; setUsePercentValues(true)
+            description.isEnabled = false; legend.isEnabled = true
+            centerText = getTotalStorage(); animateY(1200)
+        }
 
         pieChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
             override fun onValueSelected(e: Entry?, h: Highlight?) {
@@ -403,118 +349,188 @@ class SecondActivity : Activity() {
                 val filtered = allFiles.filter {
                     val n = it.name.lowercase()
                     when (label) {
-                        "Documents" -> n.endsWith(".pdf") || n.endsWith(".doc") || n.endsWith(".txt")
-                        "APK" -> n.endsWith(".apk")
-                        "Archives" -> n.endsWith(".zip") || n.endsWith(".rar")
-                        "Videos" -> n.endsWith(".mp4") || n.endsWith(".mkv")
-                        "Images" -> n.endsWith(".jpg") || n.endsWith(".png")
-                        "Audio" -> n.endsWith(".mp3")
-                        else -> true
+                        "Documents" -> n.endsWith(".pdf")||n.endsWith(".doc")||n.endsWith(".txt")
+                        "APK"       -> n.endsWith(".apk")
+                        "Archives"  -> n.endsWith(".zip")||n.endsWith(".rar")
+                        "Videos"    -> n.endsWith(".mp4")||n.endsWith(".mkv")
+                        "Images"    -> n.endsWith(".jpg")||n.endsWith(".png")
+                        "Audio"     -> n.endsWith(".mp3")
+                        else        -> true
                     }
                 }
-                displayFiles.clear()
-                displayFiles.addAll(filtered)
+                displayFiles.clear(); displayFiles.addAll(filtered)
                 showFiles(displayFiles)
             }
             override fun onNothingSelected() {}
         })
-
         pieChart.invalidate()
     }
 
     private fun getTotalStorage(): String {
-        var total = 0L
-        for (f in allFiles) total += f.length()
-        return formatSize(total)
+        return formatSize(allFiles.sumOf { it.length() })
     }
-    private fun applyFilter(type: String) {
 
+    // ── FILTER ──────────────────────────────────────────────────────────────
+    private fun applyFilter(type: String) {
         val filtered = FileFilters.filterFiles(
-            allFiles,
-            type,
+            allFiles, type,
             FileRepository.duplicateMap,
             FileRepository.fileHashMap,
-            sortBySize
-        )
-
-        displayFiles.clear()
-        displayFiles.addAll(filtered)
-
+            sortBySize)
+        displayFiles.clear(); displayFiles.addAll(filtered)
         fileCount.text = "${displayFiles.size} files"
         showFiles(displayFiles)
     }
+
+    // ── FILE LIST WITH AI KEYWORDS ───────────────────────────────────────────
     private fun showFiles(files: List<File>) {
         val adapter = object : BaseAdapter() {
-            override fun getCount(): Int = files.size
-            override fun getItem(position: Int): Any = files[position]
-            override fun getItemId(position: Int): Long = position.toLong()
+            override fun getCount()                      = files.size
+            override fun getItem(pos: Int): Any          = files[pos]
+            override fun getItemId(pos: Int)             = pos.toLong()
 
             override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
                 val file = files[position]
 
-                val row = LinearLayout(this@SecondActivity)
-                row.orientation = LinearLayout.HORIZONTAL
-                row.setPadding(20, 20, 20, 20)
-                row.background = GradientDrawable().apply {
-                    cornerRadius = 25f
-                    setColor(Color.WHITE)                      // UI: white card rows
-                    setStroke(2, Color.parseColor("#E5E7EB"))  // UI: light border
-                }
-                row.elevation = 2f                             // UI: lighter elevation
-
-                val checkBox = CheckBox(this@SecondActivity)
-                checkBox.setOnCheckedChangeListener(null)
-                checkBox.isChecked = selectedFiles.contains(file)
-                checkBox.setOnCheckedChangeListener { _, isChecked ->
-                    if (isChecked) selectedFiles.add(file)
-                    else selectedFiles.remove(file)
+                // ── Outer card ──────────────────────────────────────────────
+                val card = LinearLayout(this@SecondActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(20, 20, 20, 20)
+                    background = GradientDrawable().apply {
+                        cornerRadius = 25f; setColor(Color.WHITE)
+                        setStroke(2, Color.parseColor("#E5E7EB"))
+                    }
+                    elevation = 2f
                 }
 
-                val name = TextView(this@SecondActivity)
-                name.text = "${file.name}\n${formatSize(file.length())}"
-                name.setTextColor(Color.parseColor("#1A1A2E")) // UI: dark file name
-                name.layoutParams = LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                )
+                // ── Top row: checkbox | name+size | delete button ───────────
+                val topRow = LinearLayout(this@SecondActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
 
-                val deleteBtn = Button(this@SecondActivity)
-                deleteBtn.text = "Delete"
-                deleteBtn.setTextColor(Color.WHITE)
-                deleteBtn.setBackgroundColor(Color.parseColor("#FF4757")) // UI: cleaner red
+                val checkBox = CheckBox(this@SecondActivity).apply {
+                    setOnCheckedChangeListener(null)
+                    isChecked = selectedFiles.contains(file)
+                    setOnCheckedChangeListener { _, checked ->
+                        if (checked) selectedFiles.add(file) else selectedFiles.remove(file)
+                    }
+                }
 
-                deleteBtn.setOnClickListener {
-                    AlertDialog.Builder(this@SecondActivity)
-                        .setTitle("Delete File")
-                        .setMessage("Are you sure you want to delete ${file.name}?")
-                        .setPositiveButton("Yes") { _, _ ->
-                            file.delete()
-                            allFiles.remove(file)
-                            selectedFiles.remove(file)
-                            applyFilter(filterSpinner.selectedItem.toString())
-                            Toast.makeText(this@SecondActivity, "File deleted", Toast.LENGTH_SHORT).show()
+                val nameView = TextView(this@SecondActivity).apply {
+                    text = "${file.name}\n${formatSize(file.length())}"
+                    setTextColor(Color.parseColor("#1A1A2E"))
+                    layoutParams = LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                }
+
+                val deleteBtn = Button(this@SecondActivity).apply {
+                    text = "Delete"
+                    setTextColor(Color.WHITE)
+                    setBackgroundColor(Color.parseColor("#FF4757"))
+                    setOnClickListener {
+                        AlertDialog.Builder(this@SecondActivity)
+                            .setTitle("Delete File")
+                            .setMessage("Delete ${file.name}?")
+                            .setPositiveButton("Yes") { _, _ ->
+                                file.delete()
+                                allFiles.remove(file)
+                                selectedFiles.remove(file)
+                                applyFilter(filterSpinner.selectedItem.toString())
+                                Toast.makeText(this@SecondActivity,
+                                    "File deleted", Toast.LENGTH_SHORT).show()
+                            }
+                            .setNegativeButton("No", null)
+                            .show()
+                    }
+                }
+
+                topRow.addView(checkBox)
+                topRow.addView(nameView)
+                topRow.addView(deleteBtn)
+                card.addView(topRow)
+
+                // ── Keyword chip row ────────────────────────────────────────
+                val chipRow = LinearLayout(this@SecondActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(0, 10, 0, 0)
+                }
+
+                // "AI ✨" label
+                chipRow.addView(TextView(this@SecondActivity).apply {
+                    text = "AI ✨ "
+                    textSize = 11f
+                    setTextColor(Color.parseColor("#9CA3AF"))
+                })
+
+                // Loading placeholder
+                val loadingText = TextView(this@SecondActivity).apply {
+                    text = "analyzing..."
+                    textSize = 11f
+                    setTextColor(Color.parseColor("#9CA3AF"))
+                }
+                chipRow.addView(loadingText)
+                card.addView(chipRow)
+
+                // Fill chips from cache immediately if available
+                val cached = keywordCache[file.absolutePath]
+                if (cached != null) {
+                    loadingText.visibility = View.GONE
+                    addChips(chipRow, cached)
+                } else {
+                    // Fetch in background
+                    aiExecutor.submit {
+                        val tags = if (GeminiConfig.API_KEY == "YOUR_GEMINI_API_KEY_HERE") {
+                            GeminiAnalyzer.fallbackTags(file)   // no key yet → offline tags
+                        } else {
+                            GeminiAnalyzer.getKeywords(file)
                         }
-                        .setNegativeButton("No", null)
-                        .show()
+                        keywordCache[file.absolutePath] = tags
+                        runOnUiThread {
+                            loadingText.visibility = View.GONE
+                            addChips(chipRow, tags)
+                        }
+                    }
                 }
 
-                row.addView(checkBox)
-                row.addView(name)
-                row.addView(deleteBtn)
-
-                return row
+                return card
             }
         }
         listView.adapter = adapter
     }
 
-    private fun formatSize(size: Long): String {
-        val kb = size / 1024
-        val mb = kb / 1024
-        val gb = mb / 1024
-        return when {
-            gb > 0 -> "$gb GB"
-            mb > 0 -> "$mb MB"
-            else -> "$kb KB"
+    /** Adds coloured chip TextViews to a horizontal row. */
+    private fun addChips(row: LinearLayout, tags: List<String>) {
+        // Chip colour palette (cycles through for variety)
+        val colours = listOf(
+            "#4A90E2" to "#EBF3FF",   // blue
+            "#7ED321" to "#F0FAE3",   // green
+            "#F5A623" to "#FEF6E6",   // orange
+            "#9B59B6" to "#F5EEF8",   // purple
+            "#E74C3C" to "#FDEDEC",   // red
+            "#1ABC9C" to "#E8F8F5"    // teal
+        )
+        tags.forEachIndexed { i, tag ->
+            val (textColour, bgColour) = colours[i % colours.size]
+            row.addView(TextView(this).apply {
+                text = tag
+                textSize = 11f
+                setTextColor(Color.parseColor(textColour))
+                background = GradientDrawable().apply {
+                    cornerRadius = 40f
+                    setColor(Color.parseColor(bgColour))
+                }
+                setPadding(18, 6, 18, 6)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 10, 0) }
+            })
         }
+    }
+
+    private fun formatSize(size: Long): String {
+        val kb = size / 1024; val mb = kb / 1024; val gb = mb / 1024
+        return when { gb > 0 -> "$gb GB"; mb > 0 -> "$mb MB"; else -> "$kb KB" }
     }
 }
