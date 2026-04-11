@@ -483,7 +483,7 @@ class SecondActivity : Activity() {
                         val tags = if (GeminiConfig.API_KEY == "YOUR_GEMINI_API_KEY_HERE") {
                             GeminiAnalyzer.fallbackTags(file)   // no key yet → offline tags
                         } else {
-                            GeminiAnalyzer.getKeywords(file)
+                            GeminiAnalyzer.getKeywords(file, applicationContext)
                         }
                         keywordCache[file.absolutePath] = tags
                         runOnUiThread {
