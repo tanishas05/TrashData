@@ -9,6 +9,22 @@ object KeywordExtractor {
         "the", "is", "and", "to", "of", "in", "for", "on", "with",
         "a", "an", "this", "that", "it", "as", "at", "by"
     )
+    fun extractFromText(text: String): List<String> {
+        return try {
+            text.lowercase()
+                .replace(Regex("[^a-z ]"), " ")
+                .split(" ")
+                .filter { it.length > 4 && it !in stopWords }
+                .groupingBy { it }
+                .eachCount()
+                .entries
+                .sortedByDescending { it.value }
+                .take(5)
+                .map { it.key }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
 
     fun extract(file: File): List<String> {
         return try {

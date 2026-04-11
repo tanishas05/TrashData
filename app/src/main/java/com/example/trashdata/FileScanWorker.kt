@@ -45,8 +45,14 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
                     FileRepository.junkFiles.add(file)
 
                     // ✅ KEYWORD EXTRACTION (ONLY FOR TEXT FILES)
-                    if (file.name.endsWith(".txt") && file.length() < 2 * 1024 * 1024) {
-                        val keywords = KeywordExtractor.extract(file)
+                    if (
+                        (file.name.endsWith(".txt") ||
+                                file.name.endsWith(".pdf") ||
+                                file.name.endsWith(".docx")) &&
+                        file.length() < 2 * 1024 * 1024
+                    ) {
+                        val text = FileTextExtractor.extractText(applicationContext, file)
+                        val keywords = KeywordExtractor.extractFromText(text)
                         FileRepository.fileKeywords[file] = keywords
                     }
 
