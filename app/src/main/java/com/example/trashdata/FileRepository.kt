@@ -8,6 +8,7 @@ object FileRepository {
     val junkFiles = mutableListOf<File>()
     val fileHashMap = mutableMapOf<File, String>()
     val duplicateMap = mutableMapOf<String, MutableList<File>>() // hash -> list of files
+    val fileKeywords = mutableMapOf<File, List<String>>()
     //  SCAN FLAGS
     val isScanning = AtomicBoolean(false)  // true when scanning is running
     val cancelScan = AtomicBoolean(false)  // set to true to cancel scan
@@ -17,6 +18,7 @@ object FileRepository {
         duplicateMap.clear()
         isScanning.set(false)
         cancelScan.set(false)
+        fileKeywords.clear()
     }
     // Rebuild duplicate map from existing junkFiles
     fun buildDuplicateMap() {

@@ -41,13 +41,16 @@ object FileFilters {
 
     fun isRelevant(file: File): Boolean {
         val n = file.name.lowercase()
-        val minSize = 100 * 1024L // 100 KB
-        return file.length() > minSize && (
-                n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") ||
-                        n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".avi") ||
-                        n.endsWith(".mp3") || n.endsWith(".wav") ||
-                        n.endsWith(".pdf") || n.endsWith(".doc") || n.endsWith(".docx") || n.endsWith(".txt") ||
-                        n.endsWith(".apk") || n.endsWith(".zip") || n.endsWith(".rar")
+        val minSize = 1 * 1024L // 1 KB
+        return (
+                (n.endsWith(".txt") && file.length() > 0) ||  // allow ANY txt file
+                        (file.length() > 100 * 1024L && (
+                                n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") ||
+                                        n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".avi") ||
+                                        n.endsWith(".mp3") || n.endsWith(".wav") ||
+                                        n.endsWith(".pdf") || n.endsWith(".doc") || n.endsWith(".docx") ||
+                                        n.endsWith(".apk") || n.endsWith(".zip") || n.endsWith(".rar")
+                                ))
                 )
     }
 }

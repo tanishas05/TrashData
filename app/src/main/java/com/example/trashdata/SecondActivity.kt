@@ -470,8 +470,10 @@ class SecondActivity : Activity() {
                     else selectedFiles.remove(file)
                 }
 
+                val keywords = FileRepository.fileKeywords[file]?.joinToString(", ") ?: "No keywords"
+
                 val name = TextView(this@SecondActivity)
-                name.text = "${file.name}\n${formatSize(file.length())}"
+                name.text = "${file.name}\n${formatSize(file.length())}\n$keywords"
                 name.setTextColor(Color.parseColor("#1A1A2E")) // UI: dark file name
                 name.layoutParams = LinearLayout.LayoutParams(
                     0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
