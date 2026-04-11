@@ -43,19 +43,6 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
             FileScanner.scan(root, object : FileScanner.ScanCallback {
                 override fun onFileFound(file: File) {
                     FileRepository.junkFiles.add(file)
-
-                    // ✅ KEYWORD EXTRACTION (ONLY FOR TEXT FILES)
-                    if (
-                        (file.name.endsWith(".txt") ||
-                                file.name.endsWith(".pdf") ||
-                                file.name.endsWith(".docx")) &&
-                        file.length() < 2 * 1024 * 1024
-                    ) {
-                        val text = FileTextExtractor.extractText(applicationContext, file)
-                        val keywords = KeywordExtractor.extractFromText(text)
-                        FileRepository.fileKeywords[file] = keywords
-                    }
-
                     scannedFileCount++
                     totalSize += file.length()
                     sendProgressBroadcast(scannedFileCount, totalFiles)
