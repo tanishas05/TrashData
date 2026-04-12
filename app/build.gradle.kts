@@ -52,6 +52,9 @@ dependencies {
     // ── OkHttp for Gemini API calls ──────────────────────────────────────
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // ── PDFBox for proper PDF text extraction (no gibberish) ─────────────
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     // AndroidX + Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -69,6 +72,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 }
