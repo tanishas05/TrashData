@@ -1,48 +1,64 @@
 package com.example.trashdata
 
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
+import java.security.MessageDigest
+import java.util.Collections
 
 object FileRepository {
-    // FILE STORAGE
-    val junkFiles = mutableListOf<File>()
-    val fileHashMap = mutableMapOf<File, String>()
-    val duplicateMap = mutableMapOf<String, MutableList<File>>() // hash -> list of files
-    //  SCAN FLAGS
-    val isScanning = AtomicBoolean(false)  // true when scanning is running
-    val cancelScan = AtomicBoolean(false)  // set to true to cancel scan
+
+    // THREAD SAFE LISTS
+    val junkFiles = Collections.synchronizedList(mutableListOf<File>())
+
+    // Use PATH instead of File object
+    val fileHashMap = Collections.synchronizedMap(mutableMapOf<String, String>())
+    val duplicateMap = Collections.synchronizedMap(mutableMapOf<String, MutableList<File>>())
+
     fun clear() {
         junkFiles.clear()
         fileHashMap.clear()
         duplicateMap.clear()
-        isScanning.set(false)
-        cancelScan.set(false)
     }
-    // Rebuild duplicate map from existing junkFiles
+
+    // 🔥 FAST DUPLICATE DETECTION
     fun buildDuplicateMap() {
         fileHashMap.clear()
         duplicateMap.clear()
+
+        // STEP 1: GROUP BY SIZE
+        val sizeMap = mutableMapOf<Long, MutableList<File>>()
+
         for (f in junkFiles) {
             if (f.length() < 100 * 1024) continue
-            val h = getFileHash(f)
-            if (h.isNotEmpty()) {
-                fileHashMap[f] = h
-                duplicateMap.getOrPut(h) { mutableListOf() }.add(f)
+            sizeMap.getOrPut(f.length()) { mutableListOf() }.add(f)
+        }
+
+        // STEP 2: ONLY CHECK SAME SIZE FILES
+        for ((_, files) in sizeMap) {
+            if (files.size < 2) continue
+
+            for (f in files) {
+                val hash = getQuickHash(f) // ⚡ faster hash
+                if (hash.isNotEmpty()) {
+                    fileHashMap[f.absolutePath] = hash
+                    duplicateMap.getOrPut(hash) { mutableListOf() }.add(f)
+                }
             }
         }
     }
-    // Generate MD5 hash for a file
-    fun getFileHash(file: File): String {
+
+    // ⚡ HASH ONLY FIRST 4KB (FAST)
+    private fun getQuickHash(file: File): String {
         return try {
-            val digest = java.security.MessageDigest.getInstance("MD5")
-            val buffer = ByteArray(1024)
+            val digest = MessageDigest.getInstance("MD5")
+            val buffer = ByteArray(4096)
+
             file.inputStream().use { input ->
-                var read: Int
-                while (input.read(buffer).also { read = it } != -1) {
-                    digest.update(buffer, 0, read)
-                }
+                val read = input.read(buffer)
+                if (read > 0) digest.update(buffer, 0, read)
             }
+
             digest.digest().joinToString("") { "%02x".format(it) }
+
         } catch (e: Exception) {
             ""
         }

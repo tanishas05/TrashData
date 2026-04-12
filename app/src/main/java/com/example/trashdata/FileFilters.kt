@@ -12,7 +12,7 @@ object FileFilters {
         files: List<File>,
         type: String,
         duplicateMap: Map<String, List<File>>,
-        fileHashMap: Map<File, String>,
+        fileHashMap: Map<String, String>,   // ✅ FIXED
         sortBySize: Boolean = true
     ): List<File> {
         val now = System.currentTimeMillis()
@@ -22,7 +22,7 @@ object FileFilters {
             when (type) {
                 "All Files" -> filtered.add(f)
                 "Duplicate Files" -> {
-                    val h = fileHashMap[f] ?: ""
+                    val h = fileHashMap[f.absolutePath] ?: ""
                     if ((duplicateMap[h]?.size ?: 0) > 1) filtered.add(f)
                 }
                 "Old Files" -> if (now - f.lastModified() > OLD_FILE_THRESHOLD) filtered.add(f)
