@@ -284,12 +284,7 @@ class MainActivity : Activity() {
         grid.addView(createItem("🗂", "Old Files") { openFilesActivity("Old Files") })
         grid.addView(createItem("📦", "Large Files") { openFilesActivity("Large Files") })
         grid.addView(createItem("🧹", "Duplicate Files") { openFilesActivity("Duplicate Files") })
-        grid.addView(createItem("📁", "All Files") {
-            startScan()
-            val intent = Intent(this, SecondActivity::class.java)
-            intent.putExtra("filter", "All Files")
-            startActivity(intent)
-        })
+        grid.addView(createItem("📁", "All Files") { startScan() })
 
         container.addView(grid)
 
@@ -382,10 +377,6 @@ class MainActivity : Activity() {
         )
     }
     private fun startScan() {
-        if (FileScanWorker.isScanning.get()) {
-            Toast.makeText(this, "Scan already running", Toast.LENGTH_SHORT).show()
-            return
-        }
         scanning = true
         fileCount = 0
         FileRepository.clear()
@@ -396,11 +387,7 @@ class MainActivity : Activity() {
         progressBar.progress = 0
 
         val workRequest = OneTimeWorkRequestBuilder<FileScanWorker>().build()
-        WorkManager.getInstance(this).enqueueUniqueWork(
-            "scan_once",
-            ExistingWorkPolicy.REPLACE,
-            workRequest
-        )
+        WorkManager.getInstance(this).enqueue(workRequest)
     }
     // PERMISSIONS
     private fun requestAllFilesPermission() {
@@ -497,6 +484,7 @@ Tap to view and clean 🚀
         }
 
         requestNotificationPermission()
+        startBackgroundScan()
     }
     override fun onDestroy() {
         super.onDestroy()

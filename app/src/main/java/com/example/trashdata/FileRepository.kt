@@ -1,64 +1,60 @@
 package com.example.trashdata
 
 import java.io.File
-import java.security.MessageDigest
-import java.util.Collections
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.CopyOnWriteArrayList
 
 object FileRepository {
+    // Use CopyOnWriteArrayList — safe to read while another thread modifies
+    val junkFiles = CopyOnWriteArrayList<File>()
+    val fileHashMap = java.util.concurrent.ConcurrentHashMap<File, String>()
+    val duplicateMap = java.util.concurrent.ConcurrentHashMap<String, MutableList<File>>()
 
-    // THREAD SAFE LISTS
-    val junkFiles = Collections.synchronizedList(mutableListOf<File>())
-
-    // Use PATH instead of File object
-    val fileHashMap = Collections.synchronizedMap(mutableMapOf<String, String>())
-    val duplicateMap = Collections.synchronizedMap(mutableMapOf<String, MutableList<File>>())
+    val isScanning = AtomicBoolean(false)
+    val cancelScan = AtomicBoolean(false)
 
     fun clear() {
         junkFiles.clear()
         fileHashMap.clear()
         duplicateMap.clear()
+        isScanning.set(false)
+        cancelScan.set(false)
     }
 
-    // 🔥 FAST DUPLICATE DETECTION
+    // Call this after any delete to keep repo in sync
+    fun removeFile(file: File) {
+        junkFiles.removeAll { it.absolutePath == file.absolutePath }
+        val hash = fileHashMap.remove(file)
+        if (hash != null) {
+            duplicateMap[hash]?.removeAll { it.absolutePath == file.absolutePath }
+            if (duplicateMap[hash]?.isEmpty() == true) duplicateMap.remove(hash)
+        }
+    }
+
     fun buildDuplicateMap() {
         fileHashMap.clear()
         duplicateMap.clear()
-
-        // STEP 1: GROUP BY SIZE
-        val sizeMap = mutableMapOf<Long, MutableList<File>>()
-
         for (f in junkFiles) {
             if (f.length() < 100 * 1024) continue
-            sizeMap.getOrPut(f.length()) { mutableListOf() }.add(f)
-        }
-
-        // STEP 2: ONLY CHECK SAME SIZE FILES
-        for ((_, files) in sizeMap) {
-            if (files.size < 2) continue
-
-            for (f in files) {
-                val hash = getQuickHash(f) // ⚡ faster hash
-                if (hash.isNotEmpty()) {
-                    fileHashMap[f.absolutePath] = hash
-                    duplicateMap.getOrPut(hash) { mutableListOf() }.add(f)
-                }
+            val h = getFileHash(f)
+            if (h.isNotEmpty()) {
+                fileHashMap[f] = h
+                duplicateMap.getOrPut(h) { CopyOnWriteArrayList() }.add(f)
             }
         }
     }
 
-    // ⚡ HASH ONLY FIRST 4KB (FAST)
-    private fun getQuickHash(file: File): String {
+    fun getFileHash(file: File): String {
         return try {
-            val digest = MessageDigest.getInstance("MD5")
-            val buffer = ByteArray(4096)
-
+            val digest = java.security.MessageDigest.getInstance("MD5")
+            val buffer = ByteArray(8192) // bigger buffer = faster hashing
             file.inputStream().use { input ->
-                val read = input.read(buffer)
-                if (read > 0) digest.update(buffer, 0, read)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
+                }
             }
-
             digest.digest().joinToString("") { "%02x".format(it) }
-
         } catch (e: Exception) {
             ""
         }

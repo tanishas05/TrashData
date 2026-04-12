@@ -56,7 +56,6 @@ class SecondActivity : Activity() {
     private var sortBySize      = true
     private var initialFilter   = "All Files"
     private var resumedFromSettings = false
-    private lateinit var selectedSizeText: TextView
 
     private val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -168,37 +167,6 @@ class SecondActivity : Activity() {
         container.addView(searchBar)
         container.addView(filterSpinner)
         container.addView(sortToggle)
-        val selectAllBtn = Button(this).apply {
-            text = "Select All"
-            setBackgroundColor(Color.parseColor("#4A90E2"))
-            setTextColor(Color.WHITE)
-        }
-        selectAllBtn.setOnClickListener {
-
-            if (selectedFiles.size == displayFiles.size) {
-                selectedFiles.clear()
-                updateSelectedSize(selectedSizeText)
-                selectAllBtn.text = "Select All"
-                Toast.makeText(this, "Selection cleared", Toast.LENGTH_SHORT).show()
-            } else {
-                selectedFiles.clear()
-                selectedFiles.addAll(displayFiles)
-                selectAllBtn.text = "Clear All"
-                Toast.makeText(this, "All files selected", Toast.LENGTH_SHORT).show()
-            }
-
-            applyFilter(filterSpinner.selectedItem.toString())
-            updateSelectedSize(selectedSizeText)
-
-        }
-
-        container.addView(selectAllBtn)
-        selectedSizeText = TextView(this).apply {
-            text = "Selected: 0 KB"
-            textSize = 14f
-            setTextColor(Color.parseColor("#4A90E2"))
-        }
-        container.addView(selectedSizeText)
         container.addView(deleteSelectedBtn)
         container.addView(listView)
 
@@ -266,14 +234,12 @@ class SecondActivity : Activity() {
         loadData()
         showStorageChart()
 
-        if (FileRepository.junkFiles.isEmpty() && !FileScanWorker.isScanning.get()) {
-            Toast.makeText(this, "Run scan first", Toast.LENGTH_SHORT).show()
-        }
-        sortToggle.setOnClickListener {
-            sortBySize = !sortBySize
-            sortToggle.text = if (sortBySize) "Sort: Size" else "Sort: Date"
-            applyFilter(filterSpinner.selectedItem.toString())
-        }
+        if (FileRepository.junkFiles.isEmpty())
+            sortToggle.setOnClickListener {
+                sortBySize = !sortBySize
+                sortToggle.text = if (sortBySize) "Sort: Size" else "Sort: Date"
+                applyFilter(filterSpinner.selectedItem.toString())
+            }
 
         searchBar.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
@@ -446,7 +412,6 @@ class SecondActivity : Activity() {
                     isChecked = selectedFiles.contains(file)
                     setOnCheckedChangeListener { _, checked ->
                         if (checked) selectedFiles.add(file) else selectedFiles.remove(file)
-                        updateSelectedSize(selectedSizeText)
                     }
                 }
 
@@ -561,9 +526,5 @@ class SecondActivity : Activity() {
     private fun formatSize(size: Long): String {
         val kb = size / 1024; val mb = kb / 1024; val gb = mb / 1024
         return when { gb > 0 -> "$gb GB"; mb > 0 -> "$mb MB"; else -> "$kb KB" }
-    }
-    private fun updateSelectedSize(selectedSizeText: TextView) {
-        val total = selectedFiles.sumOf { it.length() }
-        selectedSizeText.text = "Selected: ${formatSize(total)}"
     }
 }
