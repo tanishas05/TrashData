@@ -284,7 +284,12 @@ class MainActivity : Activity() {
         grid.addView(createItem("🗂", "Old Files") { openFilesActivity("Old Files") })
         grid.addView(createItem("📦", "Large Files") { openFilesActivity("Large Files") })
         grid.addView(createItem("🧹", "Duplicate Files") { openFilesActivity("Duplicate Files") })
-        grid.addView(createItem("📁", "All Files") { startScan() })
+        grid.addView(createItem("📁", "All Files") {
+            startScan()
+            val intent = Intent(this, SecondActivity::class.java)
+            intent.putExtra("filter", "All Files")
+            startActivity(intent)
+        })
 
         container.addView(grid)
 
