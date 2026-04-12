@@ -97,7 +97,7 @@ class MainActivity : Activity() {
         }
 
         val cleanBtn = TextView(this).apply {
-            text = "CLEAN"
+            text = "SCAN"
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             textSize = 20f
