@@ -377,6 +377,10 @@ class MainActivity : Activity() {
         )
     }
     private fun startScan() {
+        if (FileScanWorker.isScanning.get()) {
+            Toast.makeText(this, "Scan already running", Toast.LENGTH_SHORT).show()
+            return
+        }
         scanning = true
         fileCount = 0
         FileRepository.clear()
@@ -387,7 +391,11 @@ class MainActivity : Activity() {
         progressBar.progress = 0
 
         val workRequest = OneTimeWorkRequestBuilder<FileScanWorker>().build()
-        WorkManager.getInstance(this).enqueue(workRequest)
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            "scan_once",
+            ExistingWorkPolicy.REPLACE,
+            workRequest
+        )
     }
     // PERMISSIONS
     private fun requestAllFilesPermission() {
@@ -484,7 +492,6 @@ Tap to view and clean 🚀
         }
 
         requestNotificationPermission()
-        startBackgroundScan()
     }
     override fun onDestroy() {
         super.onDestroy()

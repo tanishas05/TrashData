@@ -234,9 +234,9 @@ class SecondActivity : Activity() {
         loadData()
         showStorageChart()
 
-        if (FileRepository.junkFiles.isEmpty())
+        if (FileRepository.junkFiles.isEmpty() && !FileScanWorker.isScanning.get()) {
             Toast.makeText(this, "Run scan first", Toast.LENGTH_SHORT).show()
-
+        }
         sortToggle.setOnClickListener {
             sortBySize = !sortBySize
             sortToggle.text = if (sortBySize) "Sort: Size" else "Sort: Date"
