@@ -55,6 +55,9 @@ dependencies {
     // ── PDFBox for proper PDF text extraction (no gibberish) ─────────────
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
+    // ── Apache POI for DOCX text extraction ──────────────────────────────
+    implementation("org.apache.poi:poi-ooxml:5.2.3")
+
     // AndroidX + Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

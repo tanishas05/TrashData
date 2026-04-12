@@ -44,7 +44,7 @@ object KeywordAnalyzer {
      * 2. Fall back to offline if Groq fails
      */
     fun getKeywords(file: File, context: Context): List<String> {
-        if (GroqConfig.API_KEY != "YOUR_GROQ_API_KEY_HERE") {
+        if (GroqConfig.API_KEY != "sk_z966yqeVnGIWuslye5JxWGdyb3FYDXLONi7ApsD1f6MWIN7k2aXJ") {
             val result = tryGroq(file, context)
             if (!result.isNullOrEmpty()) {
                 Log.d(TAG, "Groq keywords for ${file.name}: $result")
@@ -100,6 +100,7 @@ ${extracted.take(600)}
                 put("max_tokens", 100)
             }
 
+            Log.d(TAG, "Sending to Groq for ${file.name}: $userMessage")
             val body = requestJson.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
                 .url(GROQ_ENDPOINT)
