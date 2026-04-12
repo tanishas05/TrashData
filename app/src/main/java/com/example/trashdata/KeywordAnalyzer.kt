@@ -15,26 +15,16 @@ object KeywordAnalyzer {
 
     private const val TAG = "KeywordAnalyzer"
 
-    // Zero-shot classification model — free, no fine-tuning needed
-    // Classifies text into candidate labels (our keyword categories)
-    private const val HF_ENDPOINT =
-        "https://api-inference.huggingface.co/models/cross-encoder/nli-MiniLM2-L6-H768"
-
-    // Candidate keyword labels sent to the model
-    // It picks which ones best match the file content/name
-    private val CANDIDATE_LABELS = listOf(
-        "invoice", "resume", "report", "photo", "video", "audio",
-        "document", "backup", "temporary", "duplicate", "download",
-        "screenshot", "recording", "archive", "important", "personal",
-        "work", "finance", "medical", "education", "entertainment",
-        "old", "large", "unused", "whatsapp"
-    )
+    // Groq API — free, fast, uses Llama 3
+    private const val GROQ_ENDPOINT =
+        "https://api.groq.com/openai/v1/chat/completions"
+    private const val MODEL = "llama-3.3-70b-versatile"
 
     private val TEXT_EXTENSIONS = setOf("txt", "pdf", "doc", "docx")
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
     private val STOP_WORDS = setOf(
@@ -50,31 +40,35 @@ object KeywordAnalyzer {
 
     /**
      * Main entry point.
-     * 1. Try Hugging Face API (if token is set)
-     * 2. Fall back to offline extraction if API fails
+     * 1. Try Groq API (if key is set)
+     * 2. Fall back to offline if Groq fails
      */
     fun getKeywords(file: File, context: Context): List<String> {
-        if (HuggingFaceConfig.API_TOKEN != "YOUR_HF_TOKEN_HERE") {
-            val result = tryHuggingFace(file, context)
+        if (GroqConfig.API_KEY != "YOUR_GROQ_API_KEY_HERE") {
+            val result = tryGroq(file, context)
             if (!result.isNullOrEmpty()) {
-                Log.d(TAG, "HF keywords for ${file.name}: $result")
+                Log.d(TAG, "Groq keywords for ${file.name}: $result")
                 return result
             }
-            Log.w(TAG, "HF failed for ${file.name}, using offline fallback")
+            Log.w(TAG, "Groq failed for ${file.name}, using offline fallback")
         }
         return offlineKeywords(file, context)
     }
 
-    // ── HUGGING FACE API ─────────────────────────────────────────────────────
-    private fun tryHuggingFace(file: File, context: Context): List<String>? {
+    // ── GROQ API (Llama 3) ───────────────────────────────────────────────────
+    private fun tryGroq(file: File, context: Context): List<String>? {
         return try {
-            // Build input text: extracted content for text files, metadata for others
             val ext = file.extension.lowercase()
-            val inputText = if (ext in TEXT_EXTENSIONS) {
+
+            // Build the user message
+            val userMessage = if (ext in TEXT_EXTENSIONS) {
                 val extracted = TextExtractor.extract(file, context)
                 if (!extracted.isNullOrBlank()) {
-                    // Use first 500 chars of content + filename
-                    "${file.name}: ${extracted.take(500)}"
+                    """
+File name: ${file.name}
+File content (first 600 chars):
+${extracted.take(600)}
+                    """.trimIndent()
                 } else {
                     buildMetadataString(file)
                 }
@@ -82,19 +76,35 @@ object KeywordAnalyzer {
                 buildMetadataString(file)
             }
 
-            // Build request body for zero-shot classification
-            val requestJson = JSONObject().apply {
-                put("inputs", inputText)
-                put("parameters", JSONObject().apply {
-                    put("candidate_labels", JSONArray(CANDIDATE_LABELS))
-                    put("multi_label", true)  // allow multiple labels to match
+            // Build Groq request (OpenAI-compatible format)
+            val messages = JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "system")
+                    put("content",
+                        "You are a file analysis assistant. " +
+                                "When given file information, respond with ONLY a JSON array of 4-6 short lowercase keyword tags. " +
+                                "No explanation. No markdown. No extra text. Just the JSON array. " +
+                                "Example: [\"invoice\",\"finance\",\"2024\",\"important\"]"
+                    )
                 })
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", userMessage)
+                })
+            }
+
+            val requestJson = JSONObject().apply {
+                put("model", MODEL)
+                put("messages", messages)
+                put("temperature", 0.2)
+                put("max_tokens", 100)
             }
 
             val body = requestJson.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url(HF_ENDPOINT)
-                .addHeader("Authorization", "Bearer ${HuggingFaceConfig.API_TOKEN}")
+                .url(GROQ_ENDPOINT)
+                .addHeader("Authorization", "Bearer ${GroqConfig.API_KEY}")
+                .addHeader("Content-Type", "application/json")
                 .post(body)
                 .build()
 
@@ -102,41 +112,15 @@ object KeywordAnalyzer {
             val responseBody = response.body?.string() ?: return null
 
             if (!response.isSuccessful) {
-                Log.w(TAG, "HF error ${response.code}: $responseBody")
+                Log.w(TAG, "Groq error ${response.code} for ${file.name}: $responseBody")
                 return null
             }
 
-            parseHuggingFaceResponse(responseBody)
+            Log.d(TAG, "Groq raw response for ${file.name}: $responseBody")
+            parseGroqResponse(responseBody)
 
         } catch (e: Exception) {
-            Log.e(TAG, "HF exception for ${file.name}: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * Parses HF zero-shot classification response.
-     * Returns top 4 labels with score > 0.3
-     */
-    private fun parseHuggingFaceResponse(body: String): List<String>? {
-        return try {
-            val json = JSONObject(body)
-            val labels = json.getJSONArray("labels")
-            val scores = json.getJSONArray("scores")
-
-            val results = mutableListOf<String>()
-            for (i in 0 until labels.length()) {
-                val score = scores.getDouble(i)
-                if (score > 0.30) {  // only include confident matches
-                    results.add(labels.getString(i).lowercase())
-                }
-                if (results.size >= 4) break  // max 4 tags
-            }
-
-            if (results.isEmpty()) null else results
-
-        } catch (e: Exception) {
-            Log.e(TAG, "HF parse error: ${e.message}")
+            Log.e(TAG, "Groq exception for ${file.name}: ${e.message}")
             null
         }
     }
@@ -145,7 +129,29 @@ object KeywordAnalyzer {
         val ageDays = (System.currentTimeMillis() - file.lastModified()) / (1000 * 60 * 60 * 24)
         val sizeMb  = file.length() / (1024.0 * 1024.0)
         val ext     = file.extension.lowercase()
-        return "${file.name} $ext file, ${"%.1f".format(sizeMb)}MB, ${ageDays} days old"
+        return "File name: ${file.name}, Type: .$ext, Size: ${"%.1f".format(sizeMb)}MB, Age: ${ageDays} days old"
+    }
+
+    // Groq uses OpenAI-compatible response format
+    private fun parseGroqResponse(body: String): List<String>? {
+        return try {
+            val text = JSONObject(body)
+                .getJSONArray("choices")
+                .getJSONObject(0)
+                .getJSONObject("message")
+                .getString("content")
+                .trim()
+                .removePrefix("```json")
+                .removePrefix("```")
+                .removeSuffix("```")
+                .trim()
+
+            val arr = JSONArray(text)
+            (0 until arr.length()).map { arr.getString(it).lowercase().trim() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Groq parse error: ${e.message}")
+            null
+        }
     }
 
     // ── OFFLINE FALLBACK ─────────────────────────────────────────────────────
