@@ -14,17 +14,29 @@ import java.util.concurrent.TimeUnit
 object KeywordAnalyzer {
 
     private const val TAG = "KeywordAnalyzer"
-    private const val ENDPOINT =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent"
+
+    // Zero-shot classification model — free, no fine-tuning needed
+    // Classifies text into candidate labels (our keyword categories)
+    private const val HF_ENDPOINT =
+        "https://api-inference.huggingface.co/models/cross-encoder/nli-MiniLM2-L6-H768"
+
+    // Candidate keyword labels sent to the model
+    // It picks which ones best match the file content/name
+    private val CANDIDATE_LABELS = listOf(
+        "invoice", "resume", "report", "photo", "video", "audio",
+        "document", "backup", "temporary", "duplicate", "download",
+        "screenshot", "recording", "archive", "important", "personal",
+        "work", "finance", "medical", "education", "entertainment",
+        "old", "large", "unused", "whatsapp"
+    )
 
     private val TEXT_EXTENSIONS = setOf("txt", "pdf", "doc", "docx")
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    // Common words to ignore
     private val STOP_WORDS = setOf(
         "the","and","for","are","but","not","you","all","can","her","was","one",
         "our","out","day","get","has","him","his","how","its","may","new","now",
@@ -33,60 +45,56 @@ object KeywordAnalyzer {
         "time","would","there","could","other","into","than","then","some","these",
         "when","what","your","more","also","about","after","first","well","even",
         "back","good","much","before","here","just","know","take","great","think",
-        "where","much","through","long","down","over","such","because","come","work"
+        "where","through","long","down","over","such","because","come","work"
     )
 
     /**
      * Main entry point.
-     * 1. Try Gemini API (if key is set and quota available)
-     * 2. Fall back to offline extraction if Gemini fails
+     * 1. Try Hugging Face API (if token is set)
+     * 2. Fall back to offline extraction if API fails
      */
     fun getKeywords(file: File, context: Context): List<String> {
-        // Try Gemini first if key is configured
-        if (GeminiConfig.API_KEY != "YOUR_GEMINI_API_KEY_HERE") {
-            val geminiResult = tryGemini(file, context)
-            if (!geminiResult.isNullOrEmpty()) {
-                Log.d(TAG, "Gemini keywords for ${file.name}: $geminiResult")
-                return geminiResult
+        if (HuggingFaceConfig.API_TOKEN != "YOUR_HF_TOKEN_HERE") {
+            val result = tryHuggingFace(file, context)
+            if (!result.isNullOrEmpty()) {
+                Log.d(TAG, "HF keywords for ${file.name}: $result")
+                return result
             }
-            Log.w(TAG, "Gemini failed for ${file.name}, using offline fallback")
+            Log.w(TAG, "HF failed for ${file.name}, using offline fallback")
         }
-
-        // Offline fallback
         return offlineKeywords(file, context)
     }
 
-    // ── GEMINI (primary) ─────────────────────────────────────────────────────
-    private fun tryGemini(file: File, context: Context): List<String>? {
+    // ── HUGGING FACE API ─────────────────────────────────────────────────────
+    private fun tryHuggingFace(file: File, context: Context): List<String>? {
         return try {
-            Thread.sleep(300)
-
+            // Build input text: extracted content for text files, metadata for others
             val ext = file.extension.lowercase()
-            val prompt = if (ext in TEXT_EXTENSIONS) {
-                val text = TextExtractor.extract(file, context)
-                if (!text.isNullOrBlank()) buildTextPrompt(file, text)
-                else buildMetadataPrompt(file)
+            val inputText = if (ext in TEXT_EXTENSIONS) {
+                val extracted = TextExtractor.extract(file, context)
+                if (!extracted.isNullOrBlank()) {
+                    // Use first 500 chars of content + filename
+                    "${file.name}: ${extracted.take(500)}"
+                } else {
+                    buildMetadataString(file)
+                }
             } else {
-                buildMetadataPrompt(file)
+                buildMetadataString(file)
             }
 
+            // Build request body for zero-shot classification
             val requestJson = JSONObject().apply {
-                put("contents", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("parts", JSONArray().apply {
-                            put(JSONObject().apply { put("text", prompt) })
-                        })
-                    })
-                })
-                put("generationConfig", JSONObject().apply {
-                    put("temperature", 0.2)
-                    put("maxOutputTokens", 100)
+                put("inputs", inputText)
+                put("parameters", JSONObject().apply {
+                    put("candidate_labels", JSONArray(CANDIDATE_LABELS))
+                    put("multi_label", true)  // allow multiple labels to match
                 })
             }
 
             val body = requestJson.toString().toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
-                .url("$ENDPOINT?key=${GeminiConfig.API_KEY}")
+                .url(HF_ENDPOINT)
+                .addHeader("Authorization", "Bearer ${HuggingFaceConfig.API_TOKEN}")
                 .post(body)
                 .build()
 
@@ -94,58 +102,53 @@ object KeywordAnalyzer {
             val responseBody = response.body?.string() ?: return null
 
             if (!response.isSuccessful) {
-                Log.w(TAG, "Gemini ${response.code} for ${file.name}")
+                Log.w(TAG, "HF error ${response.code}: $responseBody")
                 return null
             }
 
-            parseGeminiResponse(responseBody)
+            parseHuggingFaceResponse(responseBody)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Gemini exception for ${file.name}: ${e.message}")
+            Log.e(TAG, "HF exception for ${file.name}: ${e.message}")
             null
         }
     }
 
-    private fun buildTextPrompt(file: File, text: String) = """
-You are a file content analysis assistant.
-Return ONLY a JSON array of 4-6 short lowercase keyword tags describing the content.
-No explanation. No markdown. Just the JSON array.
+    /**
+     * Parses HF zero-shot classification response.
+     * Returns top 4 labels with score > 0.3
+     */
+    private fun parseHuggingFaceResponse(body: String): List<String>? {
+        return try {
+            val json = JSONObject(body)
+            val labels = json.getJSONArray("labels")
+            val scores = json.getJSONArray("scores")
 
-File: ${file.name}
-Content: $text
+            val results = mutableListOf<String>()
+            for (i in 0 until labels.length()) {
+                val score = scores.getDouble(i)
+                if (score > 0.30) {  // only include confident matches
+                    results.add(labels.getString(i).lowercase())
+                }
+                if (results.size >= 4) break  // max 4 tags
+            }
 
-Example: ["invoice","finance","2024","payment"]
-""".trimIndent()
+            if (results.isEmpty()) null else results
 
-    private fun buildMetadataPrompt(file: File): String {
+        } catch (e: Exception) {
+            Log.e(TAG, "HF parse error: ${e.message}")
+            null
+        }
+    }
+
+    private fun buildMetadataString(file: File): String {
         val ageDays = (System.currentTimeMillis() - file.lastModified()) / (1000 * 60 * 60 * 24)
         val sizeMb  = file.length() / (1024.0 * 1024.0)
-        return """
-You are a file analysis assistant.
-Return ONLY a JSON array of 3-5 short lowercase keyword tags describing this file.
-No explanation. No markdown. Just the JSON array.
-
-File: ${file.name}, Size: ${"%.1f".format(sizeMb)}MB, Age: ${ageDays}d
-
-Example: ["old","large","video","unused"]
-""".trimIndent()
+        val ext     = file.extension.lowercase()
+        return "${file.name} $ext file, ${"%.1f".format(sizeMb)}MB, ${ageDays} days old"
     }
 
-    private fun parseGeminiResponse(body: String): List<String>? {
-        return try {
-            val text = JSONObject(body)
-                .getJSONArray("candidates").getJSONObject(0)
-                .getJSONObject("content")
-                .getJSONArray("parts").getJSONObject(0)
-                .getString("text").trim()
-                .removePrefix("```json").removePrefix("```")
-                .removeSuffix("```").trim()
-            val arr = JSONArray(text)
-            (0 until arr.length()).map { arr.getString(it).lowercase().trim() }
-        } catch (e: Exception) { null }
-    }
-
-    // ── OFFLINE FALLBACK (always works, no internet needed) ──────────────────
+    // ── OFFLINE FALLBACK ─────────────────────────────────────────────────────
     fun offlineKeywords(file: File, context: Context): List<String> {
         val ext = file.extension.lowercase()
         return if (ext in TEXT_EXTENSIONS) {
