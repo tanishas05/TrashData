@@ -56,6 +56,7 @@ class SecondActivity : Activity() {
     private var sortBySize      = true
     private var initialFilter   = "All Files"
     private var resumedFromSettings = false
+    private lateinit var selectedSizeText: TextView
 
     private val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -176,6 +177,7 @@ class SecondActivity : Activity() {
 
             if (selectedFiles.size == displayFiles.size) {
                 selectedFiles.clear()
+                updateSelectedSize(selectedSizeText)
                 selectAllBtn.text = "Select All"
                 Toast.makeText(this, "Selection cleared", Toast.LENGTH_SHORT).show()
             } else {
@@ -186,9 +188,17 @@ class SecondActivity : Activity() {
             }
 
             applyFilter(filterSpinner.selectedItem.toString())
+            updateSelectedSize(selectedSizeText)
+
         }
 
         container.addView(selectAllBtn)
+        selectedSizeText = TextView(this).apply {
+            text = "Selected: 0 KB"
+            textSize = 14f
+            setTextColor(Color.parseColor("#4A90E2"))
+        }
+        container.addView(selectedSizeText)
         container.addView(deleteSelectedBtn)
         container.addView(listView)
 
@@ -436,6 +446,7 @@ class SecondActivity : Activity() {
                     isChecked = selectedFiles.contains(file)
                     setOnCheckedChangeListener { _, checked ->
                         if (checked) selectedFiles.add(file) else selectedFiles.remove(file)
+                        updateSelectedSize(selectedSizeText)
                     }
                 }
 
@@ -550,5 +561,9 @@ class SecondActivity : Activity() {
     private fun formatSize(size: Long): String {
         val kb = size / 1024; val mb = kb / 1024; val gb = mb / 1024
         return when { gb > 0 -> "$gb GB"; mb > 0 -> "$mb MB"; else -> "$kb KB" }
+    }
+    private fun updateSelectedSize(selectedSizeText: TextView) {
+        val total = selectedFiles.sumOf { it.length() }
+        selectedSizeText.text = "Selected: ${formatSize(total)}"
     }
 }
