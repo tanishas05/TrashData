@@ -167,6 +167,28 @@ class SecondActivity : Activity() {
         container.addView(searchBar)
         container.addView(filterSpinner)
         container.addView(sortToggle)
+        val selectAllBtn = Button(this).apply {
+            text = "Select All"
+            setBackgroundColor(Color.parseColor("#4A90E2"))
+            setTextColor(Color.WHITE)
+        }
+        selectAllBtn.setOnClickListener {
+
+            if (selectedFiles.size == displayFiles.size) {
+                selectedFiles.clear()
+                selectAllBtn.text = "Select All"
+                Toast.makeText(this, "Selection cleared", Toast.LENGTH_SHORT).show()
+            } else {
+                selectedFiles.clear()
+                selectedFiles.addAll(displayFiles)
+                selectAllBtn.text = "Clear All"
+                Toast.makeText(this, "All files selected", Toast.LENGTH_SHORT).show()
+            }
+
+            applyFilter(filterSpinner.selectedItem.toString())
+        }
+
+        container.addView(selectAllBtn)
         container.addView(deleteSelectedBtn)
         container.addView(listView)
 
