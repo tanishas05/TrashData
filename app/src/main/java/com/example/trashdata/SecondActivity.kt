@@ -7,7 +7,7 @@ import android.content.Context
 import android.content.IntentFilter
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import android.os.Environment
-import androidx.appcompat.app.AlertDialog
+import android.app.AlertDialog
 import android.widget.*
 import android.graphics.Color
 import androidx.drawerlayout.widget.DrawerLayout
@@ -161,7 +161,11 @@ class SecondActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 600)
         }
-        listView = ListView(this)
+
+        // ── FIX: itemsCanFocus = true allows buttons inside list rows to receive clicks ──
+        listView = ListView(this).apply {
+            itemsCanFocus = true
+        }
 
         container.addView(pieChart)
         container.addView(searchBar)
@@ -251,10 +255,33 @@ class SecondActivity : Activity() {
         })
 
         deleteSelectedBtn.setOnClickListener {
-            for (f in selectedFiles) if (f.exists()) f.delete()
-            Toast.makeText(this, "Deleted ${selectedFiles.size} files", Toast.LENGTH_SHORT).show()
-            selectedFiles.clear()
-            applyFilter(filterSpinner.selectedItem.toString())
+            if (selectedFiles.isEmpty()) {
+                Toast.makeText(this, "No files selected", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            try {
+                AlertDialog.Builder(this)
+                    .setTitle("Delete Selected Files")
+                    .setMessage("Are you sure you want to delete ${selectedFiles.size} files?")
+                    .setPositiveButton("Delete") { _, _ ->
+                        var deletedCount = 0
+                        val toDelete = selectedFiles.toList() // snapshot to avoid ConcurrentModification
+                        for (f in toDelete) {
+                            if (f.exists() && f.delete()) {
+                                deletedCount++
+                                allFiles.remove(f)
+                            }
+                        }
+                        Toast.makeText(this, "Deleted $deletedCount files", Toast.LENGTH_SHORT).show()
+                        selectedFiles.clear()
+                        applyFilter(filterSpinner.selectedItem.toString())
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -310,7 +337,7 @@ class SecondActivity : Activity() {
                 n.endsWith(".mp4")||n.endsWith(".mkv")||n.endsWith(".avi")  -> videos  += f.length()
                 n.endsWith(".mp3")||n.endsWith(".wav")                      -> audio   += f.length()
                 n.endsWith(".pdf")||n.endsWith(".doc")||
-                        n.endsWith(".docx")||n.endsWith(".txt")                     -> documents += f.length()
+                        n.endsWith(".docx")||n.endsWith(".txt")             -> documents += f.length()
                 n.endsWith(".apk")                                          -> apk     += f.length()
                 n.endsWith(".zip")||n.endsWith(".rar")                      -> archives+= f.length()
                 else                                                        -> others  += f.length()
@@ -383,16 +410,19 @@ class SecondActivity : Activity() {
     // ── FILE LIST WITH AI KEYWORDS ───────────────────────────────────────────
     private fun showFiles(files: List<File>) {
         val adapter = object : BaseAdapter() {
-            override fun getCount()                      = files.size
-            override fun getItem(pos: Int): Any          = files[pos]
-            override fun getItemId(pos: Int)             = pos.toLong()
+            override fun getCount()             = files.size
+            override fun getItem(pos: Int): Any = files[pos]
+            override fun getItemId(pos: Int)    = pos.toLong()
 
             override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
                 val file = files[position]
 
                 // ── Outer card ──────────────────────────────────────────────
+                // FIX: removed isClickable = true so it doesn't swallow touch events
+                // FIX: set descendantFocusability to FOCUS_AFTER_DESCENDANTS
                 val card = LinearLayout(this@SecondActivity).apply {
                     orientation = LinearLayout.VERTICAL
+                    descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                     setPadding(20, 20, 20, 20)
                     background = GradientDrawable().apply {
                         cornerRadius = 25f; setColor(Color.WHITE)
@@ -408,6 +438,8 @@ class SecondActivity : Activity() {
                 }
 
                 val checkBox = CheckBox(this@SecondActivity).apply {
+                    isFocusable = false
+                    isFocusableInTouchMode = false
                     setOnCheckedChangeListener(null)
                     isChecked = selectedFiles.contains(file)
                     setOnCheckedChangeListener { _, checked ->
@@ -422,24 +454,65 @@ class SecondActivity : Activity() {
                         0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 }
 
+                // FIX: isFocusable = true (was false) so button properly receives touch
                 val deleteBtn = Button(this@SecondActivity).apply {
                     text = "Delete"
                     setTextColor(Color.WHITE)
                     setBackgroundColor(Color.parseColor("#FF4757"))
+                    isFocusable = true
+                    isFocusableInTouchMode = false
+                    isClickable = true
+
                     setOnClickListener {
-                        AlertDialog.Builder(this@SecondActivity)
-                            .setTitle("Delete File")
-                            .setMessage("Delete ${file.name}?")
-                            .setPositiveButton("Yes") { _, _ ->
-                                file.delete()
-                                allFiles.remove(file)
-                                selectedFiles.remove(file)
-                                applyFilter(filterSpinner.selectedItem.toString())
-                                Toast.makeText(this@SecondActivity,
-                                    "File deleted", Toast.LENGTH_SHORT).show()
-                            }
-                            .setNegativeButton("No", null)
-                            .show()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                            !Environment.isExternalStorageManager()) {
+                            Toast.makeText(
+                                this@SecondActivity,
+                                "Grant 'All Files Access' to delete files",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                            return@setOnClickListener
+                        }
+
+                        // FIX: wrapped in try-catch to prevent context-related crashes
+                        try {
+                            AlertDialog.Builder(this@SecondActivity)
+                                .setTitle("Delete File")
+                                .setMessage("Are you sure you want to delete ${file.name}?")
+                                .setPositiveButton("Delete") { _, _ ->
+                                    val deleted = try {
+                                        file.delete()
+                                    } catch (e: Exception) {
+                                        false
+                                    }
+
+                                    if (deleted) {
+                                        allFiles.remove(file)
+                                        selectedFiles.remove(file)
+                                        Toast.makeText(
+                                            this@SecondActivity,
+                                            "${file.name} deleted",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        applyFilter(filterSpinner.selectedItem.toString())
+                                    } else {
+                                        Toast.makeText(
+                                            this@SecondActivity,
+                                            "Delete failed (no permission or system file)",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                this@SecondActivity,
+                                "Error showing dialog: ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
                 }
 
@@ -495,7 +568,6 @@ class SecondActivity : Activity() {
 
     /** Adds coloured chip TextViews to a horizontal row. */
     private fun addChips(row: LinearLayout, tags: List<String>) {
-        // Chip colour palette (cycles through for variety)
         val colours = listOf(
             "#4A90E2" to "#EBF3FF",   // blue
             "#7ED321" to "#F0FAE3",   // green

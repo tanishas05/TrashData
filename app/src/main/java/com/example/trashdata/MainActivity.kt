@@ -284,7 +284,7 @@ class MainActivity : Activity() {
         grid.addView(createItem("🗂", "Old Files") { openFilesActivity("Old Files") })
         grid.addView(createItem("📦", "Large Files") { openFilesActivity("Large Files") })
         grid.addView(createItem("🧹", "Duplicate Files") { openFilesActivity("Duplicate Files") })
-        grid.addView(createItem("📁", "All Files") { startScan() })
+        grid.addView(createItem("📁", "All Files") { openFilesActivity("All Files")})
 
         container.addView(grid)
 
