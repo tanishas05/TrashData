@@ -42,8 +42,9 @@ class MainActivity : Activity() {
     private var scanning = false
     private var fileCount = 0
     // BroadcastReceiver for background scan progress
-    private val scanProgressReceiver = object : BroadcastReceiver() {
+    val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+
             val scannedFiles = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
             val totalFiles = intent?.getIntExtra(FileScanWorker.EXTRA_TOTAL_FILES, 1) ?: 1
 
@@ -52,6 +53,7 @@ class MainActivity : Activity() {
             runOnUiThread {
                 counterText.text = "Junk files found: $scannedFiles"
                 statusText.text = "Scanning... ($percent%)"
+
                 progressBar.visibility = View.VISIBLE
                 progressBar.max = 100
                 progressBar.progress = percent
@@ -70,8 +72,12 @@ class MainActivity : Activity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
-            setPadding(40, 80, 40, 80)
+            setPadding(40, 40, 40, 20)
             elevation = 8f
+        }
+        val topBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
 
 // 👉 FIRST define all views
@@ -146,21 +152,32 @@ class MainActivity : Activity() {
 // 👉 NOW add them with proper alignment
 
 // Hamburger (LEFT)
-        header.addView(hamburger, LinearLayout.LayoutParams(
+        topBar.addView(hamburger)
+       /* header.addView(hamburger, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.START
-        })
+        }) */
 
 // Title (CENTER)
-        header.addView(title, LinearLayout.LayoutParams(
+        topBar.addView(title, LinearLayout.LayoutParams(
+            0,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            1f
+        ).apply {
+            gravity = Gravity.CENTER
+        })
+
+        title.gravity = Gravity.CENTER
+        header.addView(topBar)
+        /* header.addView(title, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.CENTER_HORIZONTAL
-            topMargin = 20
-        })
+            topMargin = 10
+        }) */
 
 // Subtitle (CENTER)
         header.addView(subtitle, LinearLayout.LayoutParams(
@@ -173,7 +190,7 @@ class MainActivity : Activity() {
 // CLEAN button (CENTER)
         header.addView(cleanBtn, LinearLayout.LayoutParams(320, 320).apply {
             gravity = Gravity.CENTER_HORIZONTAL
-            topMargin = 40
+            topMargin = 20
         })
 
 // CANCEL (CENTER)
@@ -287,6 +304,7 @@ class MainActivity : Activity() {
         grid.addView(createItem("📁", "All Files") { openFilesActivity("All Files")})
 
         container.addView(grid)
+
 
         // ================= MAIN CONTENT =================
         val mainContent = LinearLayout(this).apply {

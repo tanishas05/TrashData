@@ -9,15 +9,9 @@ import java.io.File
 import java.util.zip.ZipFile
 
 object TextExtractor {
-
     private const val TAG = "TextExtractor"
     private const val MAX_CHARS = 1500
     private var pdfBoxInitialized = false
-
-    /**
-     * Returns clean extracted text from txt, pdf, doc, docx.
-     * Returns null if extraction failed or file type not supported.
-     */
     fun extract(file: File, context: Context): String? {
         return try {
             when (file.extension.lowercase()) {
@@ -32,39 +26,29 @@ object TextExtractor {
             null
         }
     }
-
-    // ── TXT ──────────────────────────────────────────────────────────────────
     private fun extractTxt(file: File): String? {
         val text = file.readText(Charsets.UTF_8).trim()
         return if (text.isBlank()) null else text.take(MAX_CHARS)
     }
-
-    // ── PDF (using PDFBox — proper text extraction, no gibberish) ────────────
     private fun extractPdf(file: File, context: Context): String? {
         return try {
-            // Initialize PDFBox once
             if (!pdfBoxInitialized) {
                 PDFBoxResourceLoader.init(context)
                 pdfBoxInitialized = true
             }
-
             val document = PDDocument.load(file)
             val stripper = PDFTextStripper().apply {
-                // Only read first 3 pages to keep it fast
                 startPage = 1
                 endPage = minOf(3, document.numberOfPages)
             }
             val text = stripper.getText(document).trim()
             document.close()
-
             if (text.isBlank()) null else text.take(MAX_CHARS)
         } catch (e: Exception) {
             Log.e(TAG, "PDF extraction error: ${e.message}")
             null
         }
     }
-
-    // ── DOCX (Open XML — unzip and parse word/document.xml) ──────────────────
     private fun extractDocx(file: File): String? {
         return try {
             val zip = ZipFile(file)
@@ -73,20 +57,16 @@ object TextExtractor {
             }
             val xml = zip.getInputStream(entry).bufferedReader(Charsets.UTF_8).readText()
             zip.close()
-
             val text = xml
                 .replace(Regex("<[^>]+>"), " ")
                 .replace(Regex("\\s+"), " ")
                 .trim()
-
             if (text.isBlank()) null else text.take(MAX_CHARS)
         } catch (e: Exception) {
             Log.e(TAG, "DOCX extraction error: ${e.message}")
             null
         }
     }
-
-    // ── DOC (legacy binary — extract ASCII runs) ──────────────────────────────
     private fun extractDoc(file: File): String? {
         return try {
             val bytes = file.readBytes()
@@ -98,7 +78,6 @@ object TextExtractor {
                     val start = i
                     while (i < bytes.size && (bytes[i].toInt() and 0xFF) in 32..126) i++
                     val word = String(bytes, start, i - start, Charsets.US_ASCII).trim()
-                    // Only keep runs that look like real words (length 4-20, has vowel)
                     val cleanWords = word.split(" ").filter { w ->
                         w.length in 4..20 && w.any { it in "aeiouAEIOU" }
                     }

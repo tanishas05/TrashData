@@ -43,18 +43,13 @@ class SecondActivity : Activity() {
     private lateinit var pieChart: PieChart
     private lateinit var sortToggle: Button
     private lateinit var progressBar: ProgressBar
-
     private val allFiles      = mutableListOf<File>()
     private val displayFiles  = mutableListOf<File>()
     private val selectedFiles = mutableSetOf<File>()
-
-    // ── AI keyword cache: file path → list of tags ──────────────────────────
     private val keywordCache = ConcurrentHashMap<String, List<String>>()
-    // Thread pool for Gemini calls (max 3 concurrent)
-    private val aiExecutor = Executors.newFixedThreadPool(3)
-
-    private var sortBySize      = true
-    private var initialFilter   = "All Files"
+    private val aiExecutor   = Executors.newFixedThreadPool(3)
+    private var sortBySize   = true
+    private var initialFilter  = "All Files"
     private var resumedFromSettings = false
 
     private val scanProgressReceiver = object : BroadcastReceiver() {
@@ -80,58 +75,69 @@ class SecondActivity : Activity() {
         super.onCreate(savedInstanceState)
         initialFilter = intent.getStringExtra("filter") ?: "All Files"
         drawerLayout  = DrawerLayout(this)
-
-        // ── HEADER ──────────────────────────────────────────────────────────
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
-            setPadding(40, 100, 40, 40)
-            gravity   = Gravity.CENTER
+            setPadding(40, 100, 40, 20)
             elevation = 8f
         }
-
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         val hamburger = TextView(this).apply {
-            text = "☰"; textSize = 28f
+            text = "☰"
+            textSize = 28f
             setTextColor(Color.parseColor("#1A1A2E"))
             setTypeface(null, Typeface.BOLD)
+            setPadding(0, 0, 24, 0)
             setOnClickListener { drawerLayout.openDrawer(GravityCompat.START) }
         }
-        header.addView(hamburger, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { gravity = Gravity.START })
-
+        val titleGroup = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
         val title = TextView(this).apply {
             text = "Files Cleaner"
             setTextColor(Color.parseColor("#1A1A2E"))
-            textSize = 22f; setTypeface(null, Typeface.BOLD)
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
         }
-        fileCount    = TextView(this).apply { setTextColor(Color.parseColor("#6B7280")) }
-        progressText = TextView(this).apply { setTextColor(Color.parseColor("#4A90E2")) }
-        progressBar  = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+        fileCount = TextView(this).apply {
+            setTextColor(Color.parseColor("#6B7280"))
+            textSize = 13f
+        }
+        titleGroup.addView(title)
+        titleGroup.addView(fileCount)
+        headerRow.addView(hamburger)
+        headerRow.addView(titleGroup)
+        header.addView(headerRow)
+        progressText = TextView(this).apply {
+            setTextColor(Color.parseColor("#4A90E2"))
+            setPadding(0, 8, 0, 0)
+        }
+        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
             .apply { max = 100 }
+        header.addView(progressText)
+        header.addView(progressBar)
 
-        header.addView(title); header.addView(fileCount)
-        header.addView(progressText); header.addView(progressBar)
-
-        // ── CONTENT ─────────────────────────────────────────────────────────
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)
             setBackgroundColor(Color.parseColor("#F5F6FA"))
         }
-
         searchBar = EditText(this).apply {
             hint = "Search files..."
             setHintTextColor(Color.parseColor("#9CA3AF"))
             setTextColor(Color.parseColor("#1A1A2E"))
             background = GradientDrawable().apply {
-                cornerRadius = 60f; setColor(Color.WHITE)
+                cornerRadius = 60f
+                setColor(Color.WHITE)
                 setStroke(2, Color.parseColor("#E5E7EB"))
             }
             setPadding(30, 20, 30, 20)
         }
-
         filterSpinner = Spinner(this).apply {
             val filters = arrayOf("All Files", "Duplicate Files", "Old Files", "Large Files")
             adapter = ArrayAdapter(this@SecondActivity,
@@ -146,7 +152,6 @@ class SecondActivity : Activity() {
         val spinnerAdapter = filterSpinner.adapter as ArrayAdapter<String>
         val spinnerPos = spinnerAdapter.getPosition(initialFilter)
         if (spinnerPos >= 0) filterSpinner.setSelection(spinnerPos)
-
         sortToggle = Button(this).apply {
             text = "Sort: Size"
             setTextColor(Color.parseColor("#1A1A2E"))
@@ -162,19 +167,32 @@ class SecondActivity : Activity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, 600)
         }
 
-        // ── FIX: itemsCanFocus = true allows buttons inside list rows to receive clicks ──
         listView = ListView(this).apply {
             itemsCanFocus = true
         }
 
-        container.addView(pieChart)
-        container.addView(searchBar)
-        container.addView(filterSpinner)
-        container.addView(sortToggle)
-        container.addView(deleteSelectedBtn)
-        container.addView(listView)
+        val topSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 10)
+        }
+        topSection.addView(pieChart)
+        topSection.addView(searchBar)
+        topSection.addView(filterSpinner)
+        topSection.addView(sortToggle)
+        topSection.addView(deleteSelectedBtn)
 
-        // ── MAIN CONTENT ────────────────────────────────────────────────────
+        val scrollView = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+            isVerticalScrollBarEnabled = false
+        }
+        scrollView.addView(topSection)
+
+        container.addView(scrollView)
+        container.addView(listView, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
         val mainContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#F5F6FA"))
@@ -186,13 +204,13 @@ class SecondActivity : Activity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
 
-        // ── DRAWER ──────────────────────────────────────────────────────────
         val drawerMenu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
             layoutParams = DrawerLayout.LayoutParams(
                 600, DrawerLayout.LayoutParams.MATCH_PARENT).apply {
-                gravity = GravityCompat.START }
+                gravity = GravityCompat.START
+            }
             elevation = 16f
         }
         val drawerHeader = LinearLayout(this).apply {
@@ -259,14 +277,13 @@ class SecondActivity : Activity() {
                 Toast.makeText(this, "No files selected", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-
             try {
                 AlertDialog.Builder(this)
                     .setTitle("Delete Selected Files")
                     .setMessage("Are you sure you want to delete ${selectedFiles.size} files?")
                     .setPositiveButton("Delete") { _, _ ->
                         var deletedCount = 0
-                        val toDelete = selectedFiles.toList() // snapshot to avoid ConcurrentModification
+                        val toDelete = selectedFiles.toList()
                         for (f in toDelete) {
                             if (f.exists() && f.delete()) {
                                 deletedCount++
@@ -285,7 +302,6 @@ class SecondActivity : Activity() {
         }
     }
 
-    // ── PERMISSIONS ─────────────────────────────────────────────────────────
     private fun requestAllFilesPermission() {
         Toast.makeText(this, "Please grant full storage access", Toast.LENGTH_SHORT).show()
         startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
@@ -316,16 +332,12 @@ class SecondActivity : Activity() {
             else Toast.makeText(this, "Permission not granted.", Toast.LENGTH_SHORT).show()
         }
     }
-
-    // ── DATA ────────────────────────────────────────────────────────────────
     private fun loadData() {
         allFiles.clear()
         allFiles.addAll(FileRepository.junkFiles)
         FileRepository.buildDuplicateMap()
         applyFilter(initialFilter)
     }
-
-    // ── PIE CHART ───────────────────────────────────────────────────────────
     private fun showStorageChart() {
         var images = 0f; var videos = 0f; var audio = 0f
         var documents = 0f; var apk = 0f; var archives = 0f; var others = 0f
@@ -333,25 +345,25 @@ class SecondActivity : Activity() {
         for (f in allFiles) {
             val n = f.name.lowercase()
             when {
-                n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".png") -> images  += f.length()
-                n.endsWith(".mp4")||n.endsWith(".mkv")||n.endsWith(".avi")  -> videos  += f.length()
-                n.endsWith(".mp3")||n.endsWith(".wav")                      -> audio   += f.length()
+                n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".png") -> images    += f.length()
+                n.endsWith(".mp4")||n.endsWith(".mkv")||n.endsWith(".avi")  -> videos    += f.length()
+                n.endsWith(".mp3")||n.endsWith(".wav")                      -> audio     += f.length()
                 n.endsWith(".pdf")||n.endsWith(".doc")||
-                        n.endsWith(".docx")||n.endsWith(".txt")             -> documents += f.length()
-                n.endsWith(".apk")                                          -> apk     += f.length()
-                n.endsWith(".zip")||n.endsWith(".rar")                      -> archives+= f.length()
-                else                                                        -> others  += f.length()
+                        n.endsWith(".docx")||n.endsWith(".txt")                     -> documents += f.length()
+                n.endsWith(".apk")                                          -> apk       += f.length()
+                n.endsWith(".zip")||n.endsWith(".rar")                      -> archives  += f.length()
+                else                                                        -> others    += f.length()
             }
         }
 
         val entries = arrayListOf<PieEntry>()
         if (documents > 0) entries.add(PieEntry(documents, "Documents"))
-        if (apk      > 0) entries.add(PieEntry(apk,       "APK"))
-        if (archives > 0) entries.add(PieEntry(archives,  "Archives"))
-        if (videos   > 0) entries.add(PieEntry(videos,    "Videos"))
-        if (images   > 0) entries.add(PieEntry(images,    "Images"))
-        if (audio    > 0) entries.add(PieEntry(audio,     "Audio"))
-        if (others   > 0) entries.add(PieEntry(others,    "Others"))
+        if (apk      > 0) entries.add(PieEntry(apk,        "APK"))
+        if (archives > 0) entries.add(PieEntry(archives,   "Archives"))
+        if (videos   > 0) entries.add(PieEntry(videos,     "Videos"))
+        if (images   > 0) entries.add(PieEntry(images,     "Images"))
+        if (audio    > 0) entries.add(PieEntry(audio,      "Audio"))
+        if (others   > 0) entries.add(PieEntry(others,     "Others"))
 
         val dataSet = PieDataSet(entries, "").apply {
             colors = listOf(
@@ -363,9 +375,12 @@ class SecondActivity : Activity() {
         val data = PieData(dataSet).apply { setValueFormatter(PercentFormatter(pieChart)) }
 
         pieChart.apply {
-            this.data = data; setUsePercentValues(true)
-            description.isEnabled = false; legend.isEnabled = true
-            centerText = getTotalStorage(); animateY(1200)
+            this.data = data
+            setUsePercentValues(true)
+            description.isEnabled = false
+            legend.isEnabled = true
+            centerText = getTotalStorage()
+            animateY(1200)
         }
 
         pieChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
@@ -391,11 +406,7 @@ class SecondActivity : Activity() {
         pieChart.invalidate()
     }
 
-    private fun getTotalStorage(): String {
-        return formatSize(allFiles.sumOf { it.length() })
-    }
-
-    // ── FILTER ──────────────────────────────────────────────────────────────
+    private fun getTotalStorage(): String = formatSize(allFiles.sumOf { it.length() })
     private fun applyFilter(type: String) {
         val filtered = FileFilters.filterFiles(
             allFiles, type,
@@ -407,7 +418,6 @@ class SecondActivity : Activity() {
         showFiles(displayFiles)
     }
 
-    // ── FILE LIST WITH AI KEYWORDS ───────────────────────────────────────────
     private fun showFiles(files: List<File>) {
         val adapter = object : BaseAdapter() {
             override fun getCount()             = files.size
@@ -417,21 +427,18 @@ class SecondActivity : Activity() {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
                 val file = files[position]
 
-                // ── Outer card ──────────────────────────────────────────────
-                // FIX: removed isClickable = true so it doesn't swallow touch events
-                // FIX: set descendantFocusability to FOCUS_AFTER_DESCENDANTS
                 val card = LinearLayout(this@SecondActivity).apply {
                     orientation = LinearLayout.VERTICAL
                     descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                     setPadding(20, 20, 20, 20)
                     background = GradientDrawable().apply {
-                        cornerRadius = 25f; setColor(Color.WHITE)
+                        cornerRadius = 25f
+                        setColor(Color.WHITE)
                         setStroke(2, Color.parseColor("#E5E7EB"))
                     }
                     elevation = 2f
                 }
 
-                // ── Top row: checkbox | name+size | delete button ───────────
                 val topRow = LinearLayout(this@SecondActivity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
@@ -454,7 +461,6 @@ class SecondActivity : Activity() {
                         0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 }
 
-                // FIX: isFocusable = true (was false) so button properly receives touch
                 val deleteBtn = Button(this@SecondActivity).apply {
                     text = "Delete"
                     setTextColor(Color.WHITE)
@@ -474,19 +480,12 @@ class SecondActivity : Activity() {
                             startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                             return@setOnClickListener
                         }
-
-                        // FIX: wrapped in try-catch to prevent context-related crashes
                         try {
                             AlertDialog.Builder(this@SecondActivity)
                                 .setTitle("Delete File")
                                 .setMessage("Are you sure you want to delete ${file.name}?")
                                 .setPositiveButton("Delete") { _, _ ->
-                                    val deleted = try {
-                                        file.delete()
-                                    } catch (e: Exception) {
-                                        false
-                                    }
-
+                                    val deleted = try { file.delete() } catch (e: Exception) { false }
                                     if (deleted) {
                                         allFiles.remove(file)
                                         selectedFiles.remove(file)
@@ -520,21 +519,15 @@ class SecondActivity : Activity() {
                 topRow.addView(nameView)
                 topRow.addView(deleteBtn)
                 card.addView(topRow)
-
-                // ── Keyword chip row ────────────────────────────────────────
                 val chipRow = LinearLayout(this@SecondActivity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     setPadding(0, 10, 0, 0)
                 }
-
-                // "AI ✨" label
                 chipRow.addView(TextView(this@SecondActivity).apply {
                     text = "AI ✨ "
                     textSize = 11f
                     setTextColor(Color.parseColor("#9CA3AF"))
                 })
-
-                // Loading placeholder
                 val loadingText = TextView(this@SecondActivity).apply {
                     text = "analyzing..."
                     textSize = 11f
@@ -543,13 +536,11 @@ class SecondActivity : Activity() {
                 chipRow.addView(loadingText)
                 card.addView(chipRow)
 
-                // Fill chips from cache immediately if available
                 val cached = keywordCache[file.absolutePath]
                 if (cached != null) {
                     loadingText.visibility = View.GONE
                     addChips(chipRow, cached)
                 } else {
-                    // Fetch in background
                     aiExecutor.submit {
                         val tags = KeywordAnalyzer.getKeywords(file, applicationContext)
                         keywordCache[file.absolutePath] = tags
@@ -565,16 +556,14 @@ class SecondActivity : Activity() {
         }
         listView.adapter = adapter
     }
-
-    /** Adds coloured chip TextViews to a horizontal row. */
     private fun addChips(row: LinearLayout, tags: List<String>) {
         val colours = listOf(
-            "#4A90E2" to "#EBF3FF",   // blue
-            "#7ED321" to "#F0FAE3",   // green
-            "#F5A623" to "#FEF6E6",   // orange
-            "#9B59B6" to "#F5EEF8",   // purple
-            "#E74C3C" to "#FDEDEC",   // red
-            "#1ABC9C" to "#E8F8F5"    // teal
+            "#4A90E2" to "#EBF3FF",
+            "#7ED321" to "#F0FAE3",
+            "#F5A623" to "#FEF6E6",
+            "#9B59B6" to "#F5EEF8",
+            "#E74C3C" to "#FDEDEC",
+            "#1ABC9C" to "#E8F8F5"
         )
         tags.forEachIndexed { i, tag ->
             val (textColour, bgColour) = colours[i % colours.size]
@@ -594,7 +583,6 @@ class SecondActivity : Activity() {
             })
         }
     }
-
     private fun formatSize(size: Long): String {
         val kb = size / 1024; val mb = kb / 1024; val gb = mb / 1024
         return when { gb > 0 -> "$gb GB"; mb > 0 -> "$mb MB"; else -> "$kb KB" }
