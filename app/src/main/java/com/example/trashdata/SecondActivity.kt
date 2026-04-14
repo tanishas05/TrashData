@@ -241,10 +241,6 @@ class SecondActivity : Activity() {
         drawerMenu.addView(drawerItem("📁  Files") {
             drawerLayout.closeDrawer(GravityCompat.START)
         })
-        drawerMenu.addView(drawerItem("⚙️  Settings") {
-            Toast.makeText(this, "Settings clicked", Toast.LENGTH_SHORT).show()
-            drawerLayout.closeDrawer(GravityCompat.START)
-        })
 
         drawerLayout.addView(mainContent)
         drawerLayout.addView(drawerMenu)
@@ -261,6 +257,7 @@ class SecondActivity : Activity() {
                 sortBySize = !sortBySize
                 sortToggle.text = if (sortBySize) "Sort: Size" else "Sort: Date"
                 applyFilter(filterSpinner.selectedItem.toString())
+                showStorageChart()
             }
 
         searchBar.addTextChangedListener(object : TextWatcher {
@@ -293,6 +290,7 @@ class SecondActivity : Activity() {
                         Toast.makeText(this, "Deleted $deletedCount files", Toast.LENGTH_SHORT).show()
                         selectedFiles.clear()
                         applyFilter(filterSpinner.selectedItem.toString())
+                        showStorageChart()
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
@@ -337,6 +335,7 @@ class SecondActivity : Activity() {
         allFiles.addAll(FileRepository.junkFiles)
         FileRepository.buildDuplicateMap()
         applyFilter(initialFilter)
+        showStorageChart()
     }
     private fun showStorageChart() {
         var images = 0f; var videos = 0f; var audio = 0f
@@ -495,6 +494,7 @@ class SecondActivity : Activity() {
                                             Toast.LENGTH_SHORT
                                         ).show()
                                         applyFilter(filterSpinner.selectedItem.toString())
+                                        showStorageChart()
                                     } else {
                                         Toast.makeText(
                                             this@SecondActivity,
