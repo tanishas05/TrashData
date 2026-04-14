@@ -15,7 +15,6 @@ object KeywordAnalyzer {
 
     private const val TAG = "KeywordAnalyzer"
 
-    // Groq API — free, fast, uses Llama 3
     private const val GROQ_ENDPOINT =
         "https://api.groq.com/openai/v1/chat/completions"
     private const val MODEL = "llama-3.3-70b-versatile"
@@ -38,11 +37,6 @@ object KeywordAnalyzer {
         "where","through","long","down","over","such","because","come","work"
     )
 
-    /**
-     * Main entry point.
-     * 1. Try Groq API (if key is set)
-     * 2. Fall back to offline if Groq fails
-     */
     fun getKeywords(file: File, context: Context): List<String> {
         if (GroqConfig.API_KEY != "sk_z966yqeVnGIWuslye5JxWGdyb3FYDXLONi7ApsD1f6MWIN7k2aXJ") {
             val result = tryGroq(file, context)
@@ -55,12 +49,10 @@ object KeywordAnalyzer {
         return offlineKeywords(file, context)
     }
 
-    // ── GROQ API (Llama 3) ───────────────────────────────────────────────────
     private fun tryGroq(file: File, context: Context): List<String>? {
         return try {
             val ext = file.extension.lowercase()
 
-            // Build the user message
             val userMessage = if (ext in TEXT_EXTENSIONS) {
                 val extracted = TextExtractor.extract(file, context)
                 if (!extracted.isNullOrBlank()) {
@@ -76,7 +68,6 @@ ${extracted.take(600)}
                 buildMetadataString(file)
             }
 
-            // Build Groq request (OpenAI-compatible format)
             val messages = JSONArray().apply {
                 put(JSONObject().apply {
                     put("role", "system")
@@ -133,7 +124,6 @@ ${extracted.take(600)}
         return "File name: ${file.name}, Type: .$ext, Size: ${"%.1f".format(sizeMb)}MB, Age: ${ageDays} days old"
     }
 
-    // Groq uses OpenAI-compatible response format
     private fun parseGroqResponse(body: String): List<String>? {
         return try {
             val text = JSONObject(body)
@@ -155,7 +145,6 @@ ${extracted.take(600)}
         }
     }
 
-    // ── OFFLINE FALLBACK ─────────────────────────────────────────────────────
     fun offlineKeywords(file: File, context: Context): List<String> {
         val ext = file.extension.lowercase()
         return if (ext in TEXT_EXTENSIONS) {
@@ -204,22 +193,26 @@ ${extracted.take(600)}
 
     fun metadataTags(file: File): List<String> {
         val tags    = mutableListOf<String>()
-        val ageDays = (System.currentTimeMillis() - file.lastModified()) / (1000 * 60 * 60 * 24)
+        val ageMinutes = (System.currentTimeMillis() - file.lastModified()) / (1000 * 60)
         val sizeMb  = file.length() / (1024.0 * 1024.0)
 
         tags.add(typeTag(file))
 
-        when {
+       /*when {
             ageDays > 365 -> tags.add("very-old")
             ageDays > 90  -> tags.add("old")
             ageDays > 30  -> tags.add("aging")
             else          -> tags.add("recent")
+        }*/
+        if (ageMinutes > 15) {
+            tags.add("old")
+        } else {
+            tags.add("recent")
         }
-
         when {
-            sizeMb > 500 -> tags.add("huge")
-            sizeMb > 100 -> tags.add("large")
-            sizeMb > 10  -> tags.add("medium")
+            sizeMb > 100 -> tags.add("huge")
+            sizeMb > 10 -> tags.add("large")
+            sizeMb > 1  -> tags.add("medium")
             else         -> tags.add("small")
         }
 

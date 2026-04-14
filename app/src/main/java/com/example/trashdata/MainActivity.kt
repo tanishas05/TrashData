@@ -67,18 +67,20 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         drawerLayout = DrawerLayout(this)
+
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
             setPadding(40, 40, 40, 20)
             elevation = 8f
         }
+
         val topBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-
 
         val hamburger = TextView(this).apply {
             text = "☰"
@@ -153,8 +155,6 @@ class MainActivity : Activity() {
         ).apply {
             gravity = Gravity.START
         }) */
-
-
         topBar.addView(title, LinearLayout.LayoutParams(
             0,
             LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -164,6 +164,7 @@ class MainActivity : Activity() {
         })
 
         title.gravity = Gravity.CENTER
+
         header.addView(topBar)
         /* header.addView(title, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -209,6 +210,7 @@ class MainActivity : Activity() {
             textSize = 14f
             setTextColor(Color.parseColor("#6B7280"))
         }
+
         scanStatus = TextView(this).apply {
             text = ""
             textSize = 14f
@@ -221,9 +223,13 @@ class MainActivity : Activity() {
             progress = 0
             visibility = View.GONE
         }
+
         container.addView(statusText)
+
         container.addView(counterText)
+
         container.addView(progressBar)
+
         container.addView(scanStatus)
 
         val grid = GridLayout(this).apply {
@@ -293,7 +299,6 @@ class MainActivity : Activity() {
 
         container.addView(grid)
 
-
         val mainContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#F5F6FA"))
@@ -313,23 +318,28 @@ class MainActivity : Activity() {
             }
             elevation = 16f
         }
+
         val drawerHeader = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#4A90E2"))
             setPadding(40, 120, 40, 40)
         }
+
         drawerHeader.addView(TextView(this).apply {
             text = "TrashData"
             textSize = 20f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
         })
+
         drawerHeader.addView(TextView(this).apply {
             text = "File Cleaner"
             textSize = 12f
             setTextColor(Color.parseColor("#BBDEFB"))
         })
+
         drawerMenu.addView(drawerHeader)
+
         val menuCleaner = TextView(this).apply {
             text = "🧹  Cleaner"
             textSize = 15f
@@ -340,6 +350,7 @@ class MainActivity : Activity() {
                 drawerLayout.closeDrawer(GravityCompat.START)
             }
         }
+
         val menuFiles = TextView(this).apply {
             text = "📁  Files"
             textSize = 15f
@@ -350,17 +361,24 @@ class MainActivity : Activity() {
                 drawerLayout.closeDrawer(GravityCompat.START)
             }
         }
+
         drawerMenu.addView(menuCleaner)
+
         drawerMenu.addView(menuFiles)
+
         drawerLayout.addView(mainContent)
+
         drawerLayout.addView(drawerMenu)
+
         setContentView(drawerLayout)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
             requestAllFilesPermission()
         } else {
             startBackgroundScan()
         }
         createNotificationChannel()
+
         LocalBroadcastManager.getInstance(this).registerReceiver(
             scanProgressReceiver,
             IntentFilter(FileScanWorker.ACTION_PROGRESS)
@@ -406,7 +424,6 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
         if (requestCode == 101) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show()

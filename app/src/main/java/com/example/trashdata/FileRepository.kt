@@ -5,11 +5,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CopyOnWriteArrayList
 
 object FileRepository {
-    // Use CopyOnWriteArrayList — safe to read while another thread modifies
     val junkFiles = CopyOnWriteArrayList<File>()
     val fileHashMap = java.util.concurrent.ConcurrentHashMap<File, String>()
     val duplicateMap = java.util.concurrent.ConcurrentHashMap<String, MutableList<File>>()
-
     val isScanning = AtomicBoolean(false)
     val cancelScan = AtomicBoolean(false)
 
@@ -21,7 +19,6 @@ object FileRepository {
         cancelScan.set(false)
     }
 
-    // Call this after any delete to keep repo in sync
     fun removeFile(file: File) {
         junkFiles.removeAll { it.absolutePath == file.absolutePath }
         val hash = fileHashMap.remove(file)
@@ -47,7 +44,7 @@ object FileRepository {
     fun getFileHash(file: File): String {
         return try {
             val digest = java.security.MessageDigest.getInstance("MD5")
-            val buffer = ByteArray(8192) // bigger buffer = faster hashing
+            val buffer = ByteArray(8192)
             file.inputStream().use { input ->
                 var read: Int
                 while (input.read(buffer).also { read = it } != -1) {

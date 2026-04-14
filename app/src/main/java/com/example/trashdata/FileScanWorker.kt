@@ -20,7 +20,6 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
     companion object {
         val isScanning = AtomicBoolean(false)
         val cancelScan = AtomicBoolean(false)
-
         const val ACTION_PROGRESS = "com.example.trashdata.SCAN_PROGRESS"
         const val EXTRA_SCANNED_FILES = "scanned_files"
         const val EXTRA_TOTAL_FILES = "total_files"
@@ -37,9 +36,7 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         try {
             val root = Environment.getExternalStorageDirectory()
             FileRepository.clear()
-            // Dynamically count all relevant files first
             totalFiles = FileScanner.countTotalFiles(root)
-            //  FILE SCAN
             FileScanner.scan(root, object : FileScanner.ScanCallback {
                 override fun onFileFound(file: File) {
                     FileRepository.junkFiles.add(file)
@@ -48,35 +45,27 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
                     sendProgressBroadcast(scannedFileCount, totalFiles)
                 }
                 override fun onProgress(count: Int, totalSize: Long) {
-                    // progress now sent from onFileFound, nothing needed here
                 }
                 override fun isCancelled(): Boolean {
                     return cancelScan.get()
                 }
             })
 
-            // =================== BUILD DUPLICATES ===================
-            // Only mark duplicates, do NOT delete
             FileRepository.buildDuplicateMap()
 
-            // =================== NOTIFICATION ===================
             NotificationHelper.showSummaryNotification(
                 applicationContext,
                 scannedFileCount,
                 totalSize
             )
 
-            // Send completion broadcast
             val completeIntent = Intent("com.example.trashdata.SCAN_COMPLETE")
             LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(completeIntent)
-
         } finally {
             isScanning.set(false)
         }
-
         return Result.success()
     }
-
     private fun sendProgressBroadcast(scannedFiles: Int, totalFiles: Int) {
         val intent = Intent(ACTION_PROGRESS)
         intent.putExtra(EXTRA_SCANNED_FILES, scannedFiles)
@@ -84,7 +73,6 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
     }
 
-    // =================== SAFE MD5 HASH ===================
     private fun safeMD5(file: File): String? {
         return try {
             val digest = MessageDigest.getInstance("MD5")
@@ -99,7 +87,6 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         }
     }
 
-    // =================== SAFE FILE DELETE ===================
     private fun safeDelete(file: File) {
         try {
             val deleted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -113,18 +100,15 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
             } else {
                 file.delete()
             }
-
             if (!deleted) sendToast("Failed to delete ${file.name}")
         } catch (e: SecurityException) {
             sendToast("Cannot delete ${file.name}")
         }
     }
 
-    // CANCEL SCAN
     fun stopScan() {
         cancelScan.set(true)
     }
-    // TOAST HELPER
     private fun sendToast(message: String) {
         Handler(applicationContext.mainLooper).post {
             Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()

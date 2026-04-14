@@ -12,7 +12,6 @@ object NotificationHelper {
 
     private const val CHANNEL_ID = "trashdata_channel"
     private const val NOTIFICATION_ID = 1
-
     fun showSummaryNotification(context: Context, count: Int, size: Long) {
 
         val manager =
@@ -27,7 +26,6 @@ object NotificationHelper {
             manager.createNotificationChannel(channel)
         }
 
-        // 👉 Intent to open results screen
         val intent = Intent(context, SecondActivity::class.java)
         intent.putExtra("filter", "All Files")
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -54,15 +52,14 @@ Tap to view and clean
             .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent) // ✅ CLICK HANDLER
+            .setContentIntent(pendingIntent)
             .addAction(
                 android.R.drawable.ic_menu_view,
                 "View",
                 pendingIntent
             )
-            .setAutoCancel(true) // ✅ disappears when tapped
+            .setAutoCancel(true)
             .build()
-
         manager.notify(NOTIFICATION_ID, notification)
     }
 

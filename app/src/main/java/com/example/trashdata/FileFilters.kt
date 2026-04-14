@@ -3,11 +3,8 @@ package com.example.trashdata
 import java.io.File
 
 object FileFilters {
-
-    private const val LARGE_FILE_SIZE = 1 * 1024 * 1024L // 1 MB
-    // Threshold for old files (15 minutes)
+    private const val LARGE_FILE_SIZE = 1 * 1024 * 1024L
     private const val OLD_FILE_THRESHOLD = 15 * 60 * 1000L
-
     fun filterFiles(
         files: List<File>,
         type: String,
@@ -31,7 +28,6 @@ object FileFilters {
             }
         }
 
-        // Sort files
         return if (sortBySize) {
             filtered.sortedByDescending { it.length() }
         } else {
@@ -41,7 +37,7 @@ object FileFilters {
 
     fun isRelevant(file: File): Boolean {
         val n = file.name.lowercase()
-        val minSize = 100 * 1024L // 100 KB
+        val minSize = 100 * 1024L
         return file.length() > minSize && (
                 n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") ||
                         n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".avi") ||

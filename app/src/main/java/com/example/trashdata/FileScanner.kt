@@ -14,7 +14,7 @@ object FileScanner {
         queue.add(root)
 
         val now = System.currentTimeMillis()
-        val oldThreshold = 15 * 60 * 1000L   // SAME as your MainActivity logic
+        val oldThreshold = 15 * 60 * 1000L
 
         var count = 0
         var totalSize = 0L
@@ -22,7 +22,6 @@ object FileScanner {
         while (queue.isNotEmpty() && !callback.isCancelled()) {
             val dir = queue.removeFirst()
 
-            // Skip Android system folder (same as before)
             if (dir.absolutePath.contains("/Android")) continue
 
             val files = try {
@@ -36,7 +35,6 @@ object FileScanner {
 
                 if (file.isFile) {
 
-                    // ✅ Apply SAME filters as your original logic
                     val isOld = now - file.lastModified() > oldThreshold
                     val isRelevant = FileFilters.isRelevant(file)
 
