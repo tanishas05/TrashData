@@ -4,7 +4,7 @@ import java.io.File
 
 object FileFilters {
     private const val LARGE_FILE_SIZE = 1 * 1024 * 1024L
-    private const val OLD_FILE_THRESHOLD = 30L * 24 * 60 * 60 * 1000L // 30 days
+    private const val OLD_FILE_THRESHOLD = 15L * 60 * 1000L // 15 minutes
     fun filterFiles(
         files: List<File>,
         type: String,
@@ -42,7 +42,7 @@ object FileFilters {
 
     fun isRelevant(file: File): Boolean {
         val n = file.name.lowercase()
-        val minSize = 100 * 1024L
+        val minSize = 1L
         return file.length() > minSize && (
                 n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") ||
                         n.endsWith(".mp4") || n.endsWith(".mkv") || n.endsWith(".avi") ||

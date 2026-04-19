@@ -302,9 +302,21 @@ class MainActivity : Activity() {
         container.addView(grid)
 
         // ── Storage Dashboard ──────────────────────────────────────────
-        dashboard = LinearLayout(this).apply {
+        // Outer box that wraps the whole dashboard
+        val dashBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, 24, 0, 0)
+            setPadding(20, 20, 20, 20)
+            background = GradientDrawable().apply {
+                cornerRadius = 28f
+                setColor(Color.WHITE)
+                setStroke(2, Color.parseColor("#E5E7EB"))
+            }
+            elevation = 6f
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = 24
+            }
         }
 
         val dashTitle = TextView(this).apply {
@@ -312,34 +324,40 @@ class MainActivity : Activity() {
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.parseColor("#1A1A2E"))
-            setPadding(4, 0, 0, 12)
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(4, 0, 4, 16)
         }
-        dashboard.addView(dashTitle)
+        dashBox.addView(dashTitle)
 
+        dashboard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val gap = 10
         fun statCard(icon: String, label: String, valueProvider: () -> String): LinearLayout {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(20, 24, 20, 24)
+                setPadding(8, 16, 8, 16)
                 background = GradientDrawable().apply {
-                    cornerRadius = 24f
-                    setColor(Color.WHITE)
-                    setStroke(2, Color.parseColor("#E5E7EB"))
+                    cornerRadius = 18f
+                    setColor(Color.parseColor("#F8F9FF"))
+                    setStroke(1, Color.parseColor("#E5E7EB"))
                 }
-                elevation = 6f
+                elevation = 2f
                 layoutParams = LinearLayout.LayoutParams(0,
                     LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    setMargins(0, 0, 16, 16)
+                    setMargins(0, 0, gap, gap)
                 }
             }
             card.addView(TextView(this).apply {
                 text = icon
-                textSize = 28f
+                textSize = 24f
                 gravity = Gravity.CENTER
             })
             val valueText = TextView(this).apply {
                 text = valueProvider()
-                textSize = 16f
+                textSize = 15f
                 setTypeface(null, Typeface.BOLD)
                 setTextColor(Color.parseColor("#4A90E2"))
                 gravity = Gravity.CENTER
@@ -347,7 +365,7 @@ class MainActivity : Activity() {
             card.addView(valueText)
             card.addView(TextView(this).apply {
                 text = label
-                textSize = 11f
+                textSize = 10f
                 setTextColor(Color.parseColor("#6B7280"))
                 gravity = Gravity.CENTER
             })
@@ -355,27 +373,16 @@ class MainActivity : Activity() {
             return card
         }
 
-
-
-
-        val row1 = LinearLayout(this).apply {
+        fun makeRow() = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT)
         }
-        val row2 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT)
-        }
-        val row3 = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT)
-        }
+
+        val row1 = makeRow()
+        val row2 = makeRow()
+        val row3 = makeRow()
 
         row1.addView(statCard("💾", "Total Junk Size") { formatSize(FileRepository.junkFiles.sumOf { it.length() }) })
         row1.addView(statCard("📂", "Total Files") { "${FileRepository.junkFiles.size}" })
@@ -393,7 +400,8 @@ class MainActivity : Activity() {
         dashboard.addView(row2)
         dashboard.addView(row3)
 
-        container.addView(dashboard)
+        dashBox.addView(dashboard)
+        container.addView(dashBox)
 
 
         val scrollContainer = ScrollView(this).apply {

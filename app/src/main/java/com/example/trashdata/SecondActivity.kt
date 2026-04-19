@@ -538,7 +538,13 @@ class SecondActivity : Activity() {
                 }
 
                 val nameView = TextView(this@SecondActivity).apply {
-                    text = "${file.name}\n${formatSize(file.length())}"
+                    val ageMs = System.currentTimeMillis() - file.lastModified()
+                    val ageStr = when {
+                        ageMs < 60 * 60 * 1000L              -> "${ageMs / (60 * 1000L)} min ago"
+                        ageMs < 24 * 60 * 60 * 1000L          -> "${ageMs / (60 * 60 * 1000L)} hr ago"
+                        else                                   -> "${ageMs / (24 * 60 * 60 * 1000L)} days ago"
+                    }
+                    text = "${file.name}\n${formatSize(file.length())}  •  $ageStr"
                     setTextColor(Color.parseColor("#1A1A2E"))
                     layoutParams = LinearLayout.LayoutParams(
                         0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
