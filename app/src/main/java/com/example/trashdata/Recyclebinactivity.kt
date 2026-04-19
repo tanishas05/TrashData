@@ -29,6 +29,7 @@ class RecycleBinActivity : Activity() {
 
         drawerLayout = DrawerLayout(this)
 
+        // ── Header ───────────────────────────────────────────────────────────
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
@@ -75,6 +76,7 @@ class RecycleBinActivity : Activity() {
         }
         header.addView(noteText)
 
+        // ── Main container ────────────────────────────────────────────────────
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 16, 20, 20)
@@ -88,7 +90,7 @@ class RecycleBinActivity : Activity() {
             setOnClickListener {
                 AlertDialog.Builder(this@RecycleBinActivity)
                     .setTitle("Empty Recycle Bin")
-                    .setMessage("Permanently delete all files in the bin?")
+                    .setMessage("Permanently delete ALL ${RecycleBin.getEntries(this@RecycleBinActivity).size} files? This cannot be undone.")
                     .setPositiveButton("Delete All") { _, _ ->
                         RecycleBin.emptyBin(this@RecycleBinActivity)
                         Toast.makeText(this@RecycleBinActivity, "Bin emptied", Toast.LENGTH_SHORT).show()
@@ -117,6 +119,7 @@ class RecycleBinActivity : Activity() {
         container.addView(listView, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
+        // ── Drawer ────────────────────────────────────────────────────────────
         val drawerMenu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
@@ -158,6 +161,7 @@ class RecycleBinActivity : Activity() {
             drawerLayout.closeDrawer(GravityCompat.START)
         })
 
+        // ── Assemble ──────────────────────────────────────────────────────────
         val mainContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#F5F6FA"))
@@ -211,6 +215,7 @@ class RecycleBinActivity : Activity() {
                 val elapsed = System.currentTimeMillis() - entry.deletedAt
                 val daysLeft = 5 - (elapsed / (24 * 60 * 60 * 1000L))
                 val daysAgo  = elapsed / (24 * 60 * 60 * 1000L)
+                val originalName = entry.originalPath.substringAfterLast("/")
 
                 val card = LinearLayout(this@RecycleBinActivity).apply {
                     orientation = LinearLayout.VERTICAL
@@ -233,7 +238,6 @@ class RecycleBinActivity : Activity() {
                 }
 
                 val nameView = TextView(this@RecycleBinActivity).apply {
-                    val originalName = entry.originalPath.substringAfterLast("/")
                     text = "$originalName\n${formatSize(binFile.length())}  •  deleted ${daysAgo}d ago  •  expires in ${daysLeft}d"
                     setTextColor(Color.parseColor("#1A1A2E"))
                     textSize = 13f
@@ -247,13 +251,20 @@ class RecycleBinActivity : Activity() {
                     setBackgroundColor(Color.parseColor("#4A90E2"))
                     setPadding(16, 8, 16, 8)
                     setOnClickListener {
-                        val ok = RecycleBin.restore(this@RecycleBinActivity, entry)
-                        Toast.makeText(
-                            this@RecycleBinActivity,
-                            if (ok) "Restored to ${entry.originalPath}" else "Restore failed",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        if (ok) refreshList()
+                        AlertDialog.Builder(this@RecycleBinActivity)
+                            .setTitle("Restore File")
+                            .setMessage("Restore \"$originalName\" to its original location?")
+                            .setPositiveButton("Restore") { _, _ ->
+                                val ok = RecycleBin.restore(this@RecycleBinActivity, entry)
+                                Toast.makeText(
+                                    this@RecycleBinActivity,
+                                    if (ok) "Restored to ${entry.originalPath}" else "Restore failed",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                if (ok) refreshList()
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
                     }
                 }
 
@@ -270,7 +281,7 @@ class RecycleBinActivity : Activity() {
                     setOnClickListener {
                         AlertDialog.Builder(this@RecycleBinActivity)
                             .setTitle("Delete Permanently")
-                            .setMessage("This cannot be undone.")
+                            .setMessage("Permanently delete \"$originalName\"? This cannot be undone.")
                             .setPositiveButton("Delete") { _, _ ->
                                 RecycleBin.deletePermanently(this@RecycleBinActivity, entry)
                                 refreshList()
@@ -291,8 +302,7 @@ class RecycleBinActivity : Activity() {
                     max = 100
                     this.progress = progress
                     layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        12
+                        LinearLayout.LayoutParams.MATCH_PARENT, 12
                     ).apply { setMargins(0, 10, 0, 0) }
                     progressDrawable.setColorFilter(
                         Color.parseColor(if (progress > 75) "#FF4757" else "#4A90E2"),

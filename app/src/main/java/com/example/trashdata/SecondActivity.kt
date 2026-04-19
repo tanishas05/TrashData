@@ -454,12 +454,12 @@ class SecondActivity : Activity() {
         showStorageChart()
     }
 
-    private fun showStorageChart() {
+    private fun showStorageChart(filesToChart: List<File> = displayFiles) {
         var images = 0f; var videos = 0f; var audio = 0f
         var documents = 0f; var apk = 0f; var archives = 0f
         var code = 0f; var others = 0f
 
-        for (f in allFiles) {
+        for (f in filesToChart) {
             val n = f.name.lowercase()
             when {
                 isImage(n)    -> images    += f.length()
@@ -502,14 +502,14 @@ class SecondActivity : Activity() {
             setUsePercentValues(true)
             description.isEnabled = false
             legend.isEnabled = true
-            centerText = getTotalStorage()
+            centerText = formatSize(filesToChart.sumOf { it.length() })
             animateY(1200)
         }
 
         pieChart.setOnChartValueSelectedListener(object : OnChartValueSelectedListener {
             override fun onValueSelected(e: Entry?, h: Highlight?) {
                 val label = (e as PieEntry).label
-                val filtered = allFiles.filter {
+                val filtered = displayFiles.filter {
                     val n = it.name.lowercase()
                     when (label) {
                         "Images"    -> isImage(n)
@@ -526,14 +526,13 @@ class SecondActivity : Activity() {
                 filterSizeText.text = "$label: ${formatSize(filtered.sumOf { it.length() })}"
                 pieChart.centerText = "$label\n${formatSize(filtered.sumOf { it.length() })}"
                 pieChart.invalidate()
-                displayFiles.clear(); displayFiles.addAll(filtered)
-                showFiles(displayFiles)
+                showFiles(filtered)
             }
             override fun onNothingSelected() {
                 filterSizeText.text = ""
-                pieChart.centerText = getTotalStorage()
+                pieChart.centerText = formatSize(displayFiles.sumOf { it.length() })
                 pieChart.invalidate()
-                applyFilter(filterSpinner.selectedItem.toString())
+                showFiles(displayFiles)
             }
         })
         pieChart.invalidate()
@@ -553,6 +552,7 @@ class SecondActivity : Activity() {
         fileCount.text = "${displayFiles.size} files$ageLabel"
         selectAllBtn.text = "Select All"
         showFiles(displayFiles)
+        showStorageChart(displayFiles)
     }
 
     private fun showFiles(files: List<File>) {
