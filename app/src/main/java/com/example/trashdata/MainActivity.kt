@@ -49,6 +49,13 @@ class MainActivity : Activity() {
     private lateinit var statLargeFiles: TextView
     private lateinit var statOldFiles: TextView
     private lateinit var statFreeSpace: TextView
+
+    /** Live-update the dashboard whenever SecondActivity deletes a file. */
+    private val filesChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            runOnUiThread { updateDashboard() }
+        }
+    }
     val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
 
@@ -521,6 +528,10 @@ class MainActivity : Activity() {
             scanProgressReceiver,
             IntentFilter(FileScanWorker.ACTION_PROGRESS)
         )
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            filesChangedReceiver,
+            IntentFilter(FileScanWorker.ACTION_FILES_CHANGED)
+        )
     }
     private fun startScan() {
         scanning = true
@@ -636,6 +647,7 @@ Tap to view and clean 🚀
     override fun onDestroy() {
         super.onDestroy()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(scanProgressReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(filesChangedReceiver)
     }
     private fun startBackgroundScan() {
         val workRequest =

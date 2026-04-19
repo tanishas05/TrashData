@@ -400,12 +400,14 @@ class SecondActivity : Activity() {
                             if (RecycleBin.moveToTrash(this, f)) {
                                 deletedCount++
                                 allFiles.remove(f)
+                                FileRepository.removeFile(f)
                             }
                         }
                         Toast.makeText(this, "Moved $deletedCount files to Recycle Bin", Toast.LENGTH_SHORT).show()
                         selectedFiles.clear()
                         applyFilter(filterSpinner.selectedItem.toString())
                         showStorageChart()
+                        broadcastFilesChanged()
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
@@ -632,6 +634,7 @@ class SecondActivity : Activity() {
                                     if (moved) {
                                         allFiles.remove(file)
                                         selectedFiles.remove(file)
+                                        FileRepository.removeFile(file)
                                         Toast.makeText(
                                             this@SecondActivity,
                                             "${file.name} moved to Recycle Bin",
@@ -639,6 +642,7 @@ class SecondActivity : Activity() {
                                         ).show()
                                         applyFilter(filterSpinner.selectedItem.toString())
                                         showStorageChart()
+                                        broadcastFilesChanged()
                                     } else {
                                         Toast.makeText(
                                             this@SecondActivity,
@@ -732,5 +736,11 @@ class SecondActivity : Activity() {
     private fun formatSize(size: Long): String {
         val kb = size / 1024; val mb = kb / 1024; val gb = mb / 1024
         return when { gb > 0 -> "$gb GB"; mb > 0 -> "$mb MB"; else -> "$kb KB" }
+    }
+
+    /** Notify MainActivity (and any other listener) that the file list has changed. */
+    private fun broadcastFilesChanged() {
+        LocalBroadcastManager.getInstance(this)
+            .sendBroadcast(Intent(FileScanWorker.ACTION_FILES_CHANGED))
     }
 }

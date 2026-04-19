@@ -21,6 +21,7 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
         val isScanning = AtomicBoolean(false)
         val cancelScan = AtomicBoolean(false)
         const val ACTION_PROGRESS = "com.example.trashdata.SCAN_PROGRESS"
+        const val ACTION_FILES_CHANGED = "com.example.trashdata.FILES_CHANGED"
         const val EXTRA_SCANNED_FILES = "scanned_files"
         const val EXTRA_TOTAL_FILES = "total_files"
     }

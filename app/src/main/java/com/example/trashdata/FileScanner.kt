@@ -13,9 +13,6 @@ object FileScanner {
         val queue = ArrayDeque<File>()
         queue.add(root)
 
-        val now = System.currentTimeMillis()
-        val oldThreshold = 15 * 60 * 1000L
-
         var count = 0
         var totalSize = 0L
 
@@ -33,17 +30,10 @@ object FileScanner {
             for (file in files) {
                 if (callback.isCancelled()) return
 
-                if (file.isFile) {
-
-                    val isOld = now - file.lastModified() > oldThreshold
-                    val isRelevant = FileFilters.isRelevant(file)
-
-                    if (isOld && isRelevant) {
-                        count++
-                        totalSize += file.length()
-
-                        callback.onFileFound(file)
-                    }
+                if (file.isFile && FileFilters.isRelevant(file)) {
+                    count++
+                    totalSize += file.length()
+                    callback.onFileFound(file)
                 }
 
                 if (file.isDirectory) {

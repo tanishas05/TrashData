@@ -31,13 +31,31 @@ object FileRepository {
     fun buildDuplicateMap() {
         fileHashMap.clear()
         duplicateMap.clear()
+
+        // Phase 1: group by (name + size) — fast, no I/O
+        val nameSize = java.util.concurrent.ConcurrentHashMap<String, MutableList<File>>()
         for (f in junkFiles) {
-            if (f.length() < 100 * 1024) continue
-            val h = getFileHash(f)
-            if (h.isNotEmpty()) {
-                fileHashMap[f] = h
-                duplicateMap.getOrPut(h) { CopyOnWriteArrayList() }.add(f)
+            val key = "${f.name}|${f.length()}"
+            nameSize.getOrPut(key) { CopyOnWriteArrayList() }.add(f)
+        }
+
+        // Phase 2: for groups with >1 candidate, confirm with MD5 hash
+        for ((_, candidates) in nameSize) {
+            if (candidates.size < 2) continue
+            for (f in candidates) {
+                val h = getFileHash(f)
+                if (h.isNotEmpty()) {
+                    fileHashMap[f] = h
+                    duplicateMap.getOrPut(h) { CopyOnWriteArrayList() }.add(f)
+                }
             }
+        }
+
+        // Clean up groups that turned out to be unique after hashing
+        val toRemove = duplicateMap.entries.filter { it.value.size < 2 }.map { it.key }
+        for (k in toRemove) {
+            duplicateMap[k]?.forEach { fileHashMap.remove(it) }
+            duplicateMap.remove(k)
         }
     }
 
