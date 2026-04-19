@@ -37,6 +37,7 @@ class SecondActivity : Activity() {
     private lateinit var listView: ListView
     private lateinit var filterSpinner: Spinner
     private lateinit var deleteSelectedBtn: Button
+    private lateinit var selectAllBtn: Button
     private lateinit var searchBar: EditText
     private lateinit var fileCount: TextView
     private lateinit var progressText: TextView
@@ -51,6 +52,8 @@ class SecondActivity : Activity() {
     private var sortBySize   = true
     private var initialFilter  = "All Files"
     private var resumedFromSettings = false
+    // -1 = no age filter, otherwise days
+    private var ageDayFilter = -1
 
     private val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -162,6 +165,60 @@ class SecondActivity : Activity() {
             setBackgroundColor(Color.parseColor("#FF4757"))
             setTextColor(Color.WHITE)
         }
+        selectAllBtn = Button(this).apply {
+            text = "Select All"
+            setBackgroundColor(Color.parseColor("#4A90E2"))
+            setTextColor(Color.WHITE)
+        }
+
+        // Age filter row: All | 1d | 2d | 5d
+        val ageFilterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 8, 0, 4)
+            tag = "ageFilterRow"
+        }
+        fun makeAgeChip(label: String, days: Int): TextView {
+            return TextView(this).apply {
+                text = label
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(24, 10, 24, 10)
+                setTextColor(Color.parseColor("#4A90E2"))
+                background = GradientDrawable().apply {
+                    cornerRadius = 40f
+                    setColor(Color.parseColor("#EBF3FF"))
+                    setStroke(2, Color.parseColor("#4A90E2"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { setMargins(0, 0, 14, 0) }
+                setOnClickListener {
+                    ageDayFilter = if (ageDayFilter == days) -1 else days
+                    for (i in 0 until ageFilterRow.childCount) {
+                        val chip = ageFilterRow.getChildAt(i) as? TextView ?: continue
+                        val bg = chip.background as? GradientDrawable ?: continue
+                        val isActive = chip.text == label && ageDayFilter != -1
+                        bg.setColor(Color.parseColor(if (isActive) "#4A90E2" else "#EBF3FF"))
+                        chip.setTextColor(Color.parseColor(if (isActive) "#FFFFFF" else "#4A90E2"))
+                    }
+                    applyFilter(filterSpinner.selectedItem.toString())
+                }
+            }
+        }
+        ageFilterRow.addView(TextView(this).apply {
+            text = "Age: "
+            textSize = 13f
+            gravity = Gravity.CENTER_VERTICAL
+            setTextColor(Color.parseColor("#6B7280"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { setMargins(0, 0, 8, 0) }
+        })
+        ageFilterRow.addView(makeAgeChip("1 day", 1))
+        ageFilterRow.addView(makeAgeChip("2 days", 2))
+        ageFilterRow.addView(makeAgeChip("5 days", 5))
         pieChart = PieChart(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 600)
@@ -178,8 +235,19 @@ class SecondActivity : Activity() {
         topSection.addView(pieChart)
         topSection.addView(searchBar)
         topSection.addView(filterSpinner)
+        topSection.addView(ageFilterRow)
         topSection.addView(sortToggle)
-        topSection.addView(deleteSelectedBtn)
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        actionRow.addView(selectAllBtn, LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        actionRow.addView(deleteSelectedBtn, LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(8, 0, 0, 0) })
+        topSection.addView(actionRow)
 
         val scrollView = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -259,6 +327,19 @@ class SecondActivity : Activity() {
                 applyFilter(filterSpinner.selectedItem.toString())
                 showStorageChart()
             }
+
+        selectAllBtn.setOnClickListener {
+            if (selectedFiles.size == displayFiles.size) {
+                // all already selected → deselect all
+                selectedFiles.clear()
+                selectAllBtn.text = "Select All"
+            } else {
+                selectedFiles.addAll(displayFiles)
+                selectAllBtn.text = "Deselect All"
+            }
+            // refresh list to update checkboxes
+            showFiles(displayFiles)
+        }
 
         searchBar.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
@@ -411,9 +492,12 @@ class SecondActivity : Activity() {
             allFiles, type,
             FileRepository.duplicateMap,
             FileRepository.fileHashMap,
-            sortBySize)
+            sortBySize,
+            ageDayFilter)
         displayFiles.clear(); displayFiles.addAll(filtered)
-        fileCount.text = "${displayFiles.size} files"
+        val ageLabel = if (ageDayFilter > 0) ", older than $ageDayFilter day(s)" else ""
+        fileCount.text = "${displayFiles.size} files$ageLabel"
+        selectAllBtn.text = "Select All"
         showFiles(displayFiles)
     }
 

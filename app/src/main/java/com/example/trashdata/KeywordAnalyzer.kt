@@ -38,7 +38,7 @@ object KeywordAnalyzer {
     )
 
     fun getKeywords(file: File, context: Context): List<String> {
-        if (GroqConfig.API_KEY != "sk_z966yqeVnGIWuslye5JxWGdyb3FYDXLONi7ApsD1f6MWIN7k2aXJ") {
+        if (GroqConfig.API_KEY.isNotBlank()) {
             val result = tryGroq(file, context)
             if (!result.isNullOrEmpty()) {
                 Log.d(TAG, "Groq keywords for ${file.name}: $result")
@@ -198,12 +198,12 @@ ${extracted.take(600)}
 
         tags.add(typeTag(file))
 
-       /*when {
-            ageDays > 365 -> tags.add("very-old")
-            ageDays > 90  -> tags.add("old")
-            ageDays > 30  -> tags.add("aging")
-            else          -> tags.add("recent")
-        }*/
+        /*when {
+             ageDays > 365 -> tags.add("very-old")
+             ageDays > 90  -> tags.add("old")
+             ageDays > 30  -> tags.add("aging")
+             else          -> tags.add("recent")
+         }*/
         if (ageMinutes > 15) {
             tags.add("old")
         } else {

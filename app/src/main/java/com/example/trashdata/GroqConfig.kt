@@ -1,5 +1,8 @@
 package com.example.trashdata
 
 object GroqConfig {
-    const val API_KEY = "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"
+    // API key is read from BuildConfig, which pulls it from local.properties at build time.
+    // Add this line to your local.properties (never commit that file):
+    //   GROQ_API_KEY=gsk_yourKeyHere
+    val API_KEY: String get() = BuildConfig.GROQ_API_KEY
 }
