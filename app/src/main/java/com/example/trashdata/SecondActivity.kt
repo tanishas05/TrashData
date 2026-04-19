@@ -42,14 +42,16 @@ class SecondActivity : Activity() {
     private lateinit var fileCount: TextView
     private lateinit var progressText: TextView
     private lateinit var pieChart: PieChart
-    private lateinit var sortToggle: Button
+    private lateinit var sortSpinner: Spinner
+    private lateinit var ageSpinner: Spinner
+    private lateinit var filterSizeText: TextView
     private lateinit var progressBar: ProgressBar
     private val allFiles      = mutableListOf<File>()
     private val displayFiles  = mutableListOf<File>()
     private val selectedFiles = mutableSetOf<File>()
     private val keywordCache = ConcurrentHashMap<String, List<String>>()
     private val aiExecutor   = Executors.newFixedThreadPool(3)
-    private var sortBySize   = true
+    private var sortMode    = FileFilters.SortMode.SIZE_HIGH_LOW
     private var initialFilter  = "All Files"
     private var resumedFromSettings = false
     // -1 = no age filter, otherwise days
@@ -147,18 +149,67 @@ class SecondActivity : Activity() {
                 android.R.layout.simple_spinner_dropdown_item, filters)
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) {
-                    applyFilter(p.getItemAtPosition(pos).toString())
+                    val type = p.getItemAtPosition(pos).toString()
+                    applyFilter(type)
+                    val now = System.currentTimeMillis()
+                    val sizeBytes = allFiles.filter { f ->
+                        when (type) {
+                            "Duplicate Files" -> (FileRepository.duplicateMap[FileRepository.fileHashMap[f] ?: ""]?.size ?: 0) > 1
+                            "Old Files"       -> now - f.lastModified() > 15L * 60 * 1000L
+                            "Large Files"     -> f.length() >= 1 * 1024 * 1024L
+                            else              -> true
+                        }
+                    }.sumOf { it.length() }
+                    filterSizeText.text = "Space used: ${formatSize(sizeBytes)}"
                 }
                 override fun onNothingSelected(p: AdapterView<*>) {}
             }
         }
+        filterSizeText = TextView(this).apply {
+            setTextColor(Color.parseColor("#4A90E2"))
+            textSize = 12f
+            setPadding(8, 2, 8, 6)
+        }
         val spinnerAdapter = filterSpinner.adapter as ArrayAdapter<String>
         val spinnerPos = spinnerAdapter.getPosition(initialFilter)
         if (spinnerPos >= 0) filterSpinner.setSelection(spinnerPos)
-        sortToggle = Button(this).apply {
-            text = "Sort: Size"
-            setTextColor(Color.parseColor("#1A1A2E"))
-            setBackgroundColor(Color.WHITE)
+
+        // Age dropdown
+        ageSpinner = Spinner(this).apply {
+            val ageOptions = arrayOf("Any Age", "1 day", "2 days", "5 days", "7 days", "10 days", "15 days")
+            adapter = ArrayAdapter(this@SecondActivity,
+                android.R.layout.simple_spinner_dropdown_item, ageOptions)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) {
+                    ageDayFilter = when (pos) {
+                        1 -> 1; 2 -> 2; 3 -> 5; 4 -> 7; 5 -> 10; 6 -> 15
+                        else -> -1
+                    }
+                    applyFilter(filterSpinner.selectedItem.toString())
+                }
+                override fun onNothingSelected(p: AdapterView<*>) {}
+            }
+        }
+
+        // Sort dropdown
+        sortSpinner = Spinner(this).apply {
+            val sortOptions = arrayOf("Size ↓ High→Low", "Size ↑ Low→High", "Date ↓ Newest", "Date ↑ Oldest")
+            adapter = ArrayAdapter(this@SecondActivity,
+                android.R.layout.simple_spinner_dropdown_item, sortOptions)
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(p: AdapterView<*>, v: View?, pos: Int, id: Long) {
+                    sortMode = when (pos) {
+                        0 -> FileFilters.SortMode.SIZE_HIGH_LOW
+                        1 -> FileFilters.SortMode.SIZE_LOW_HIGH
+                        2 -> FileFilters.SortMode.DATE_NEWEST
+                        3 -> FileFilters.SortMode.DATE_OLDEST
+                        else -> FileFilters.SortMode.SIZE_HIGH_LOW
+                    }
+                    applyFilter(filterSpinner.selectedItem.toString())
+                    showStorageChart()
+                }
+                override fun onNothingSelected(p: AdapterView<*>) {}
+            }
         }
         deleteSelectedBtn = Button(this).apply {
             text = "Delete Selected"
@@ -171,54 +222,6 @@ class SecondActivity : Activity() {
             setTextColor(Color.WHITE)
         }
 
-        // Age filter row: All | 1d | 2d | 5d
-        val ageFilterRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 8, 0, 4)
-            tag = "ageFilterRow"
-        }
-        fun makeAgeChip(label: String, days: Int): TextView {
-            return TextView(this).apply {
-                text = label
-                textSize = 12f
-                gravity = Gravity.CENTER
-                setPadding(24, 10, 24, 10)
-                setTextColor(Color.parseColor("#4A90E2"))
-                background = GradientDrawable().apply {
-                    cornerRadius = 40f
-                    setColor(Color.parseColor("#EBF3FF"))
-                    setStroke(2, Color.parseColor("#4A90E2"))
-                }
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { setMargins(0, 0, 14, 0) }
-                setOnClickListener {
-                    ageDayFilter = if (ageDayFilter == days) -1 else days
-                    for (i in 0 until ageFilterRow.childCount) {
-                        val chip = ageFilterRow.getChildAt(i) as? TextView ?: continue
-                        val bg = chip.background as? GradientDrawable ?: continue
-                        val isActive = chip.text == label && ageDayFilter != -1
-                        bg.setColor(Color.parseColor(if (isActive) "#4A90E2" else "#EBF3FF"))
-                        chip.setTextColor(Color.parseColor(if (isActive) "#FFFFFF" else "#4A90E2"))
-                    }
-                    applyFilter(filterSpinner.selectedItem.toString())
-                }
-            }
-        }
-        ageFilterRow.addView(TextView(this).apply {
-            text = "Age: "
-            textSize = 13f
-            gravity = Gravity.CENTER_VERTICAL
-            setTextColor(Color.parseColor("#6B7280"))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 8, 0) }
-        })
-        ageFilterRow.addView(makeAgeChip("1 day", 1))
-        ageFilterRow.addView(makeAgeChip("2 days", 2))
-        ageFilterRow.addView(makeAgeChip("5 days", 5))
         pieChart = PieChart(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 600)
@@ -235,8 +238,18 @@ class SecondActivity : Activity() {
         topSection.addView(pieChart)
         topSection.addView(searchBar)
         topSection.addView(filterSpinner)
-        topSection.addView(ageFilterRow)
-        topSection.addView(sortToggle)
+        topSection.addView(filterSizeText)
+        val ageAndSortRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        ageAndSortRow.addView(ageSpinner, LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        ageAndSortRow.addView(sortSpinner, LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { setMargins(8, 0, 0, 0) })
+        topSection.addView(ageAndSortRow)
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -319,14 +332,6 @@ class SecondActivity : Activity() {
 
         loadData()
         showStorageChart()
-
-        if (FileRepository.junkFiles.isEmpty())
-            sortToggle.setOnClickListener {
-                sortBySize = !sortBySize
-                sortToggle.text = if (sortBySize) "Sort: Size" else "Sort: Date"
-                applyFilter(filterSpinner.selectedItem.toString())
-                showStorageChart()
-            }
 
         selectAllBtn.setOnClickListener {
             if (selectedFiles.size == displayFiles.size) {
@@ -478,10 +483,17 @@ class SecondActivity : Activity() {
                         else        -> true
                     }
                 }
+                filterSizeText.text = "$label: ${formatSize(filtered.sumOf { it.length() })}"
+                pieChart.centerText = "$label\n${formatSize(filtered.sumOf { it.length() })}"
+                pieChart.invalidate()
                 displayFiles.clear(); displayFiles.addAll(filtered)
                 showFiles(displayFiles)
             }
-            override fun onNothingSelected() {}
+            override fun onNothingSelected() {
+                filterSizeText.text = ""
+                pieChart.centerText = getTotalStorage()
+                pieChart.invalidate()
+            }
         })
         pieChart.invalidate()
     }
@@ -492,8 +504,8 @@ class SecondActivity : Activity() {
             allFiles, type,
             FileRepository.duplicateMap,
             FileRepository.fileHashMap,
-            sortBySize,
-            ageDayFilter)
+            ageDays = ageDayFilter,
+            sortMode = sortMode)
         displayFiles.clear(); displayFiles.addAll(filtered)
         val ageLabel = if (ageDayFilter > 0) ", older than $ageDayFilter day(s)" else ""
         fileCount.text = "${displayFiles.size} files$ageLabel"

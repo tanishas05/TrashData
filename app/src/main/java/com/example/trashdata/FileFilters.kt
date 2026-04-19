@@ -5,21 +5,24 @@ import java.io.File
 object FileFilters {
     private const val LARGE_FILE_SIZE = 1 * 1024 * 1024L
     private const val OLD_FILE_THRESHOLD = 15L * 60 * 1000L // 15 minutes
+
+    enum class SortMode { SIZE_HIGH_LOW, SIZE_LOW_HIGH, DATE_NEWEST, DATE_OLDEST }
+
     fun filterFiles(
         files: List<File>,
         type: String,
         duplicateMap: Map<String, List<File>>,
         fileHashMap: Map<File, String>,
         sortBySize: Boolean = true,
-        ageDays: Int = -1          // -1 = no extra age filter
+        ageDays: Int = -1,
+        sortMode: SortMode = SortMode.SIZE_HIGH_LOW
     ): List<File> {
         val now = System.currentTimeMillis()
         val ageThreshold = if (ageDays > 0) ageDays.toLong() * 24 * 60 * 60 * 1000L else -1L
         val filtered = mutableListOf<File>()
 
         for (f in files) {
-            // Age filter applied on top of category filter
-            if (ageThreshold > 0 && (now - f.lastModified()) > ageThreshold) continue
+            if (ageThreshold > 0 && (now - f.lastModified()) < ageThreshold) continue
 
             when (type) {
                 "All Files" -> filtered.add(f)
@@ -33,10 +36,11 @@ object FileFilters {
             }
         }
 
-        return if (sortBySize) {
-            filtered.sortedByDescending { it.length() }
-        } else {
-            filtered.sortedByDescending { it.lastModified() }
+        return when (sortMode) {
+            SortMode.SIZE_HIGH_LOW -> filtered.sortedByDescending { it.length() }
+            SortMode.SIZE_LOW_HIGH -> filtered.sortedBy { it.length() }
+            SortMode.DATE_NEWEST   -> filtered.sortedByDescending { it.lastModified() }
+            SortMode.DATE_OLDEST   -> filtered.sortedBy { it.lastModified() }
         }
     }
 
