@@ -36,6 +36,11 @@
             android:name=".SecondActivity"
             android:exported="false"/>
 
+        <!-- Recycle Bin Screen -->
+        <activity
+            android:name=".RecycleBinActivity"
+            android:exported="false"/>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

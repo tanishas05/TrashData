@@ -478,6 +478,18 @@ class MainActivity : Activity() {
 
         drawerMenu.addView(menuFiles)
 
+        val menuRecycleBin = TextView(this).apply {
+            text = "🗑  Recycle Bin"
+            textSize = 15f
+            setTextColor(Color.parseColor("#1A1A2E"))
+            setPadding(40, 40, 40, 40)
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, RecycleBinActivity::class.java))
+                drawerLayout.closeDrawer(GravityCompat.START)
+            }
+        }
+        drawerMenu.addView(menuRecycleBin)
+
         drawerLayout.addView(mainContent)
 
         drawerLayout.addView(drawerMenu)

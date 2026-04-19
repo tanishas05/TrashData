@@ -322,6 +322,10 @@ class SecondActivity : Activity() {
         drawerMenu.addView(drawerItem("📁  Files") {
             drawerLayout.closeDrawer(GravityCompat.START)
         })
+        drawerMenu.addView(drawerItem("🗑  Recycle Bin") {
+            startActivity(Intent(this, RecycleBinActivity::class.java))
+            drawerLayout.closeDrawer(GravityCompat.START)
+        })
 
         drawerLayout.addView(mainContent)
         drawerLayout.addView(drawerMenu)
@@ -368,12 +372,12 @@ class SecondActivity : Activity() {
                         var deletedCount = 0
                         val toDelete = selectedFiles.toList()
                         for (f in toDelete) {
-                            if (f.exists() && f.delete()) {
+                            if (RecycleBin.moveToTrash(this, f)) {
                                 deletedCount++
                                 allFiles.remove(f)
                             }
                         }
-                        Toast.makeText(this, "Deleted $deletedCount files", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Moved $deletedCount files to Recycle Bin", Toast.LENGTH_SHORT).show()
                         selectedFiles.clear()
                         applyFilter(filterSpinner.selectedItem.toString())
                         showStorageChart()
@@ -586,13 +590,13 @@ class SecondActivity : Activity() {
                                 .setTitle("Delete File")
                                 .setMessage("Are you sure you want to delete ${file.name}?")
                                 .setPositiveButton("Delete") { _, _ ->
-                                    val deleted = try { file.delete() } catch (e: Exception) { false }
-                                    if (deleted) {
+                                    val moved = RecycleBin.moveToTrash(this@SecondActivity, file)
+                                    if (moved) {
                                         allFiles.remove(file)
                                         selectedFiles.remove(file)
                                         Toast.makeText(
                                             this@SecondActivity,
-                                            "${file.name} deleted",
+                                            "${file.name} moved to Recycle Bin",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                         applyFilter(filterSpinner.selectedItem.toString())
