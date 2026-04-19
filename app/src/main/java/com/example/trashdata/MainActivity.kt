@@ -301,8 +301,6 @@ class MainActivity : Activity() {
 
         container.addView(grid)
 
-        // ── Storage Dashboard ──────────────────────────────────────────
-        // Outer box that wraps the whole dashboard
         val dashBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 20, 20, 20)

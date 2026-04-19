@@ -21,7 +21,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Read the Groq API key from local.properties (never commit that file)
         val localProps = Properties()
         val localPropsFile = rootProject.file("local.properties")
         if (localPropsFile.exists()) localProps.load(localPropsFile.inputStream())
@@ -52,23 +51,12 @@ android {
 }
 
 dependencies {
-    // Charts
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
-
-    // Material + WorkManager
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
-
-    // ── OkHttp for Gemini API calls ──────────────────────────────────────
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-
-    // ── PDFBox for proper PDF text extraction (no gibberish) ─────────────
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
-
-    // ── Apache POI for DOCX text extraction ──────────────────────────────
     implementation("org.apache.poi:poi-ooxml:5.2.3")
-
-    // AndroidX + Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -77,7 +65,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -54,7 +54,6 @@ class SecondActivity : Activity() {
     private var sortMode    = FileFilters.SortMode.SIZE_HIGH_LOW
     private var initialFilter  = "All Files"
     private var resumedFromSettings = false
-    // -1 = no age filter, otherwise days
     private var ageDayFilter = -1
 
     private val scanProgressReceiver = object : BroadcastReceiver() {
@@ -174,7 +173,6 @@ class SecondActivity : Activity() {
         val spinnerPos = spinnerAdapter.getPosition(initialFilter)
         if (spinnerPos >= 0) filterSpinner.setSelection(spinnerPos)
 
-        // Age dropdown
         ageSpinner = Spinner(this).apply {
             val ageOptions = arrayOf("Any Age", "1 day", "2 days", "5 days", "7 days", "10 days", "15 days")
             adapter = ArrayAdapter(this@SecondActivity,
@@ -191,7 +189,6 @@ class SecondActivity : Activity() {
             }
         }
 
-        // Sort dropdown
         sortSpinner = Spinner(this).apply {
             val sortOptions = arrayOf("Size ↓ High→Low", "Size ↑ Low→High", "Date ↓ Newest", "Date ↑ Oldest")
             adapter = ArrayAdapter(this@SecondActivity,

@@ -29,7 +29,6 @@ class RecycleBinActivity : Activity() {
 
         drawerLayout = DrawerLayout(this)
 
-        // ── Header ───────────────────────────────────────────────────────────
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
@@ -76,7 +75,6 @@ class RecycleBinActivity : Activity() {
         }
         header.addView(noteText)
 
-        // ── Main container ────────────────────────────────────────────────────
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 16, 20, 20)
@@ -119,7 +117,6 @@ class RecycleBinActivity : Activity() {
         container.addView(listView, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        // ── Drawer ────────────────────────────────────────────────────────────
         val drawerMenu = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.WHITE)
@@ -161,7 +158,6 @@ class RecycleBinActivity : Activity() {
             drawerLayout.closeDrawer(GravityCompat.START)
         })
 
-        // ── Assemble ──────────────────────────────────────────────────────────
         val mainContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#F5F6FA"))
@@ -212,7 +208,6 @@ class RecycleBinActivity : Activity() {
                     getFileStreamPath("recycle_bin").parentFile,
                     "recycle_bin/${entry.trashedName}"
                 )
-                // Compute days remaining
                 val elapsed = System.currentTimeMillis() - entry.deletedAt
                 val daysLeft = 5 - (elapsed / (24 * 60 * 60 * 1000L))
                 val daysAgo  = elapsed / (24 * 60 * 60 * 1000L)
@@ -290,7 +285,6 @@ class RecycleBinActivity : Activity() {
                 topRow.addView(deleteBtn)
                 card.addView(topRow)
 
-                // Expiry progress bar
                 val progress = ((elapsed.toFloat() / (5 * 24 * 60 * 60 * 1000L)) * 100).toInt().coerceIn(0, 100)
                 val expiryBar = ProgressBar(this@RecycleBinActivity, null,
                     android.R.attr.progressBarStyleHorizontal).apply {
