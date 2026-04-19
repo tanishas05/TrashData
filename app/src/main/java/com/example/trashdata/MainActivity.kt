@@ -42,6 +42,13 @@ class MainActivity : Activity() {
     private var scanning = false
     private var fileCount = 0
     private lateinit var dashboard: LinearLayout
+    // Named references for each dashboard stat — avoids the brittle child-traversal bug
+    private lateinit var statTotalSize: TextView
+    private lateinit var statTotalFiles: TextView
+    private lateinit var statDuplicates: TextView
+    private lateinit var statLargeFiles: TextView
+    private lateinit var statOldFiles: TextView
+    private lateinit var statFreeSpace: TextView
     val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
 
@@ -332,7 +339,29 @@ class MainActivity : Activity() {
         }
 
         val gap = 10
-        fun statCard(icon: String, label: String, valueProvider: () -> String): LinearLayout {
+
+        fun makeRow() = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+
+        val row1 = makeRow()
+        val row2 = makeRow()
+        val row3 = makeRow()
+
+        // FIX: capture each card's value TextView directly into named fields.
+        // The old code relied on positional child-traversal in updateDashboard() which
+        // miscounted rows vs cards and caused duplicate-files (and other stats) to glitch.
+        fun statCardRef(icon: String, label: String, initial: String): Pair<LinearLayout, TextView> {
+            val tv = TextView(this).apply {
+                text = initial
+                textSize = 15f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor("#4A90E2"))
+                gravity = Gravity.CENTER
+            }
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
@@ -349,50 +378,37 @@ class MainActivity : Activity() {
                 }
             }
             card.addView(TextView(this).apply {
-                text = icon
-                textSize = 24f
-                gravity = Gravity.CENTER
+                text = icon; textSize = 24f; gravity = Gravity.CENTER
             })
-            val valueText = TextView(this).apply {
-                text = valueProvider()
-                textSize = 15f
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(Color.parseColor("#4A90E2"))
-                gravity = Gravity.CENTER
-            }
-            card.addView(valueText)
+            card.addView(tv)
             card.addView(TextView(this).apply {
-                text = label
-                textSize = 10f
-                setTextColor(Color.parseColor("#6B7280"))
-                gravity = Gravity.CENTER
+                text = label; textSize = 10f
+                setTextColor(Color.parseColor("#6B7280")); gravity = Gravity.CENTER
             })
-            card.tag = valueText
-            return card
+            return Pair(card, tv)
         }
 
-        fun makeRow() = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT)
-        }
+        val (cardTotalSize,   tvTotalSize)   = statCardRef("💾", "Total Junk Size", "0 KB")
+        val (cardTotalFiles,  tvTotalFiles)  = statCardRef("📂", "Total Files",     "0")
+        val (cardDuplicates,  tvDuplicates)  = statCardRef("🔁", "Duplicates",      "0")
+        val (cardLargeFiles,  tvLargeFiles)  = statCardRef("📦", "Large Files",     "0")
+        val (cardOldFiles,    tvOldFiles)    = statCardRef("🕒", "Old Files",       "0")
+        val (cardFreeSpace,   tvFreeSpace)   = statCardRef("🆓", "Free Space",      "…")
 
-        val row1 = makeRow()
-        val row2 = makeRow()
-        val row3 = makeRow()
+        // Store references so updateDashboard() can update them directly
+        statTotalSize  = tvTotalSize
+        statTotalFiles = tvTotalFiles
+        statDuplicates = tvDuplicates
+        statLargeFiles = tvLargeFiles
+        statOldFiles   = tvOldFiles
+        statFreeSpace  = tvFreeSpace
 
-        row1.addView(statCard("💾", "Total Junk Size") { formatSize(FileRepository.junkFiles.sumOf { it.length() }) })
-        row1.addView(statCard("📂", "Total Files") { "${FileRepository.junkFiles.size}" })
-        row2.addView(statCard("🔁", "Duplicates") { "${FileRepository.duplicateMap.values.filter { it.size > 1 }.sumOf { it.size - 1 }}" })
-        row2.addView(statCard("📦", "Large Files") { "${FileRepository.junkFiles.count { it.length() >= 1 * 1024 * 1024L }}" })
-        row3.addView(statCard("🕒", "Old Files") { val now = System.currentTimeMillis(); "${FileRepository.junkFiles.count { now - it.lastModified() > 15 * 60 * 1000L }}" })
-        row3.addView(statCard("🆓", "Free Space") {
-            try {
-                val stat = android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path)
-                formatSize(stat.availableBlocksLong * stat.blockSizeLong)
-            } catch (e: Exception) { "N/A" }
-        })
+        row1.addView(cardTotalSize)
+        row1.addView(cardTotalFiles)
+        row2.addView(cardDuplicates)
+        row2.addView(cardLargeFiles)
+        row3.addView(cardOldFiles)
+        row3.addView(cardFreeSpace)
 
         dashboard.addView(row1)
         dashboard.addView(row2)
@@ -633,43 +649,32 @@ Tap to view and clean 🚀
     }
 
     private fun updateDashboard() {
-        if (!::dashboard.isInitialized) return
+        // Guard: stat TextViews must be initialized before updating
+        if (!::statTotalSize.isInitialized) return
+
         val files = FileRepository.junkFiles
-        val totalSize = files.sumOf { it.length() }
-        val duplicates = FileRepository.duplicateMap.values.filter { it.size > 1 }.sumOf { it.size - 1 }
+        val now   = System.currentTimeMillis()
+
+        val totalSize  = files.sumOf { it.length() }
+        // FIX: count only the *extra* copies, not all files in a duplicate group.
+        // duplicateMap groups files by hash; a group of size N has (N-1) duplicates.
+        val duplicates = FileRepository.duplicateMap.values
+            .filter { it.size > 1 }
+            .sumOf { it.size - 1 }
         val largeFiles = files.count { it.length() >= 1 * 1024 * 1024L }
-        val now = System.currentTimeMillis()
-        val oldFiles = files.count { now - it.lastModified() > 15 * 60 * 1000L }
-        val freeSpace = try {
+        val oldFiles   = files.count { now - it.lastModified() > 15 * 60 * 1000L }
+        val freeSpace  = try {
             val stat = android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path)
             stat.availableBlocksLong * stat.blockSizeLong
         } catch (e: Exception) { 0L }
 
-        val statValues = listOf(
-            formatSize(totalSize),
-            "${files.size}",
-            "$duplicates",
-            "$largeFiles",
-            "$oldFiles",
-            formatSize(freeSpace)
-        )
-
-        var statIndex = 0
-        for (i in 0 until dashboard.childCount) {
-            val child = dashboard.getChildAt(i)
-            if (child is LinearLayout) {
-                val isRow = child.getChildAt(0) is LinearLayout
-                if (isRow) {
-                    for (j in 0 until child.childCount) {
-                        val card = child.getChildAt(j) as? LinearLayout ?: continue
-                        val tv = card.tag as? TextView ?: continue
-                        if (statIndex < statValues.size) {
-                            tv.text = statValues[statIndex++]
-                        }
-                    }
-                }
-            }
-        }
+        // Direct assignment — no child-traversal, no index drift, no glitching
+        statTotalSize.text  = formatSize(totalSize)
+        statTotalFiles.text = "${files.size}"
+        statDuplicates.text = "$duplicates"
+        statLargeFiles.text = "$largeFiles"
+        statOldFiles.text   = "$oldFiles"
+        statFreeSpace.text  = if (freeSpace > 0) formatSize(freeSpace) else "N/A"
     }
 
     private fun formatSize(bytes: Long): String {
