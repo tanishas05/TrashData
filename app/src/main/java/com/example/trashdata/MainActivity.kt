@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     lateinit var scanStatus: TextView
     private var scanning = false
     private var fileCount = 0
+    private lateinit var dashboard: LinearLayout
     val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
 
@@ -60,6 +61,7 @@ class MainActivity : Activity() {
                 if (percent >= 100) {
                     statusText.text = "Scan Complete ✅"
                     progressBar.visibility = View.GONE
+                    updateDashboard()
                 }
             }
         }
@@ -149,12 +151,12 @@ class MainActivity : Activity() {
         }
 
         topBar.addView(hamburger)
-       /* header.addView(hamburger, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.START
-        }) */
+        /* header.addView(hamburger, LinearLayout.LayoutParams(
+             LinearLayout.LayoutParams.WRAP_CONTENT,
+             LinearLayout.LayoutParams.WRAP_CONTENT
+         ).apply {
+             gravity = Gravity.START
+         }) */
         topBar.addView(title, LinearLayout.LayoutParams(
             0,
             LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -299,6 +301,108 @@ class MainActivity : Activity() {
 
         container.addView(grid)
 
+        // ── Storage Dashboard ──────────────────────────────────────────
+        dashboard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 24, 0, 0)
+        }
+
+        val dashTitle = TextView(this).apply {
+            text = "Storage Dashboard"
+            textSize = 15f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#1A1A2E"))
+            setPadding(4, 0, 0, 12)
+        }
+        dashboard.addView(dashTitle)
+
+        fun statCard(icon: String, label: String, valueProvider: () -> String): LinearLayout {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(20, 24, 20, 24)
+                background = GradientDrawable().apply {
+                    cornerRadius = 24f
+                    setColor(Color.WHITE)
+                    setStroke(2, Color.parseColor("#E5E7EB"))
+                }
+                elevation = 6f
+                layoutParams = LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    setMargins(0, 0, 16, 16)
+                }
+            }
+            card.addView(TextView(this).apply {
+                text = icon
+                textSize = 28f
+                gravity = Gravity.CENTER
+            })
+            val valueText = TextView(this).apply {
+                text = valueProvider()
+                textSize = 16f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.parseColor("#4A90E2"))
+                gravity = Gravity.CENTER
+            }
+            card.addView(valueText)
+            card.addView(TextView(this).apply {
+                text = label
+                textSize = 11f
+                setTextColor(Color.parseColor("#6B7280"))
+                gravity = Gravity.CENTER
+            })
+            card.tag = valueText
+            return card
+        }
+
+
+
+
+        val row1 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val row2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val row3 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+
+        row1.addView(statCard("💾", "Total Junk Size") { formatSize(FileRepository.junkFiles.sumOf { it.length() }) })
+        row1.addView(statCard("📂", "Total Files") { "${FileRepository.junkFiles.size}" })
+        row2.addView(statCard("🔁", "Duplicates") { "${FileRepository.duplicateMap.values.filter { it.size > 1 }.sumOf { it.size - 1 }}" })
+        row2.addView(statCard("📦", "Large Files") { "${FileRepository.junkFiles.count { it.length() >= 1 * 1024 * 1024L }}" })
+        row3.addView(statCard("🕒", "Old Files") { val now = System.currentTimeMillis(); "${FileRepository.junkFiles.count { now - it.lastModified() > 15 * 60 * 1000L }}" })
+        row3.addView(statCard("🆓", "Free Space") {
+            try {
+                val stat = android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path)
+                formatSize(stat.availableBlocksLong * stat.blockSizeLong)
+            } catch (e: Exception) { "N/A" }
+        })
+
+        dashboard.addView(row1)
+        dashboard.addView(row2)
+        dashboard.addView(row3)
+
+        container.addView(dashboard)
+
+
+        val scrollContainer = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            isVerticalScrollBarEnabled = false
+            addView(container)
+        }
+
         val mainContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#F5F6FA"))
@@ -307,7 +411,7 @@ class MainActivity : Activity() {
                 DrawerLayout.LayoutParams.MATCH_PARENT
             )
             addView(header)
-            addView(container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(scrollContainer)
         }
 
         val drawerMenu = LinearLayout(this).apply {
@@ -492,6 +596,7 @@ Tap to view and clean 🚀
         }
         requestNotificationPermission()
         startBackgroundScan()
+        updateDashboard()
     }
 
     override fun onDestroy() {
@@ -507,5 +612,54 @@ Tap to view and clean 🚀
             ExistingPeriodicWorkPolicy.KEEP,
             workRequest
         )
+    }
+
+    private fun updateDashboard() {
+        if (!::dashboard.isInitialized) return
+        val files = FileRepository.junkFiles
+        val totalSize = files.sumOf { it.length() }
+        val duplicates = FileRepository.duplicateMap.values.filter { it.size > 1 }.sumOf { it.size - 1 }
+        val largeFiles = files.count { it.length() >= 1 * 1024 * 1024L }
+        val now = System.currentTimeMillis()
+        val oldFiles = files.count { now - it.lastModified() > 15 * 60 * 1000L }
+        val freeSpace = try {
+            val stat = android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path)
+            stat.availableBlocksLong * stat.blockSizeLong
+        } catch (e: Exception) { 0L }
+
+        val statValues = listOf(
+            formatSize(totalSize),
+            "${files.size}",
+            "$duplicates",
+            "$largeFiles",
+            "$oldFiles",
+            formatSize(freeSpace)
+        )
+
+        var statIndex = 0
+        for (i in 0 until dashboard.childCount) {
+            val child = dashboard.getChildAt(i)
+            if (child is LinearLayout) {
+                val isRow = child.getChildAt(0) is LinearLayout
+                if (isRow) {
+                    for (j in 0 until child.childCount) {
+                        val card = child.getChildAt(j) as? LinearLayout ?: continue
+                        val tv = card.tag as? TextView ?: continue
+                        if (statIndex < statValues.size) {
+                            tv.text = statValues[statIndex++]
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun formatSize(bytes: Long): String {
+        val kb = bytes / 1024; val mb = kb / 1024; val gb = mb / 1024
+        return when {
+            gb > 0 -> "${"%.1f".format(bytes / 1_073_741_824.0)} GB"
+            mb > 0 -> "${"%.1f".format(bytes / 1_048_576.0)} MB"
+            else -> "$kb KB"
+        }
     }
 }
