@@ -56,6 +56,36 @@ class SecondActivity : Activity() {
     private var resumedFromSettings = false
     private var ageDayFilter = -1
 
+    // ── file type helpers ─────────────────────────────────────────────────────
+    private fun isImage(n: String)    = n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".png")||
+            n.endsWith(".gif")||n.endsWith(".webp")||n.endsWith(".bmp")||
+            n.endsWith(".heic")||n.endsWith(".heif")||n.endsWith(".tiff")||
+            n.endsWith(".raw")||n.endsWith(".svg")||n.endsWith(".ico")
+    private fun isVideo(n: String)    = n.endsWith(".mp4")||n.endsWith(".mkv")||n.endsWith(".avi")||
+            n.endsWith(".mov")||n.endsWith(".3gp")||n.endsWith(".3g2")||
+            n.endsWith(".webm")||n.endsWith(".flv")||n.endsWith(".wmv")||
+            n.endsWith(".m4v")||n.endsWith(".ts")||n.endsWith(".mpeg")||
+            n.endsWith(".mpg")
+    private fun isAudio(n: String)    = n.endsWith(".mp3")||n.endsWith(".wav")||n.endsWith(".aac")||
+            n.endsWith(".flac")||n.endsWith(".ogg")||n.endsWith(".m4a")||
+            n.endsWith(".wma")||n.endsWith(".opus")||n.endsWith(".amr")||
+            n.endsWith(".mid")||n.endsWith(".midi")
+    private fun isDocument(n: String) = n.endsWith(".pdf")||n.endsWith(".doc")||n.endsWith(".docx")||
+            n.endsWith(".txt")||n.endsWith(".xls")||n.endsWith(".xlsx")||
+            n.endsWith(".ppt")||n.endsWith(".pptx")||n.endsWith(".odt")||
+            n.endsWith(".ods")||n.endsWith(".odp")||n.endsWith(".csv")||
+            n.endsWith(".rtf")||n.endsWith(".epub")||n.endsWith(".pages")||
+            n.endsWith(".numbers")||n.endsWith(".key")
+    private fun isArchive(n: String)  = n.endsWith(".zip")||n.endsWith(".rar")||n.endsWith(".7z")||
+            n.endsWith(".tar")||n.endsWith(".gz")||n.endsWith(".bz2")||
+            n.endsWith(".xz")||n.endsWith(".cab")||n.endsWith(".iso")
+    private fun isApk(n: String)      = n.endsWith(".apk")||n.endsWith(".apks")||n.endsWith(".xapk")||
+            n.endsWith(".aab")
+    private fun isCode(n: String)     = n.endsWith(".json")||n.endsWith(".xml")||n.endsWith(".html")||
+            n.endsWith(".htm")||n.endsWith(".js")||n.endsWith(".css")||
+            n.endsWith(".sql")||n.endsWith(".db")||n.endsWith(".sqlite")||
+            n.endsWith(".log")
+
     private val scanProgressReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val scanned = intent?.getIntExtra(FileScanWorker.EXTRA_SCANNED_FILES, 0) ?: 0
@@ -336,14 +366,12 @@ class SecondActivity : Activity() {
 
         selectAllBtn.setOnClickListener {
             if (selectedFiles.size == displayFiles.size) {
-                // all already selected → deselect all
                 selectedFiles.clear()
                 selectAllBtn.text = "Select All"
             } else {
                 selectedFiles.addAll(displayFiles)
                 selectAllBtn.text = "Deselect All"
             }
-            // refresh list to update checkboxes
             showFiles(displayFiles)
         }
 
@@ -417,6 +445,7 @@ class SecondActivity : Activity() {
             else Toast.makeText(this, "Permission not granted.", Toast.LENGTH_SHORT).show()
         }
     }
+
     private fun loadData() {
         allFiles.clear()
         allFiles.addAll(FileRepository.junkFiles)
@@ -424,39 +453,47 @@ class SecondActivity : Activity() {
         applyFilter(initialFilter)
         showStorageChart()
     }
+
     private fun showStorageChart() {
         var images = 0f; var videos = 0f; var audio = 0f
-        var documents = 0f; var apk = 0f; var archives = 0f; var others = 0f
+        var documents = 0f; var apk = 0f; var archives = 0f
+        var code = 0f; var others = 0f
 
         for (f in allFiles) {
             val n = f.name.lowercase()
             when {
-                n.endsWith(".jpg")||n.endsWith(".jpeg")||n.endsWith(".png") -> images    += f.length()
-                n.endsWith(".mp4")||n.endsWith(".mkv")||n.endsWith(".avi")  -> videos    += f.length()
-                n.endsWith(".mp3")||n.endsWith(".wav")                      -> audio     += f.length()
-                n.endsWith(".pdf")||n.endsWith(".doc")||
-                        n.endsWith(".docx")||n.endsWith(".txt")                     -> documents += f.length()
-                n.endsWith(".apk")                                          -> apk       += f.length()
-                n.endsWith(".zip")||n.endsWith(".rar")                      -> archives  += f.length()
-                else                                                        -> others    += f.length()
+                isImage(n)    -> images    += f.length()
+                isVideo(n)    -> videos    += f.length()
+                isAudio(n)    -> audio     += f.length()
+                isDocument(n) -> documents += f.length()
+                isApk(n)      -> apk       += f.length()
+                isArchive(n)  -> archives  += f.length()
+                isCode(n)     -> code      += f.length()
+                else          -> others    += f.length()
             }
         }
 
         val entries = arrayListOf<PieEntry>()
+        if (images    > 0) entries.add(PieEntry(images,    "Images"))
+        if (videos    > 0) entries.add(PieEntry(videos,    "Videos"))
+        if (audio     > 0) entries.add(PieEntry(audio,     "Audio"))
         if (documents > 0) entries.add(PieEntry(documents, "Documents"))
-        if (apk      > 0) entries.add(PieEntry(apk,        "APK"))
-        if (archives > 0) entries.add(PieEntry(archives,   "Archives"))
-        if (videos   > 0) entries.add(PieEntry(videos,     "Videos"))
-        if (images   > 0) entries.add(PieEntry(images,     "Images"))
-        if (audio    > 0) entries.add(PieEntry(audio,      "Audio"))
-        if (others   > 0) entries.add(PieEntry(others,     "Others"))
+        if (apk       > 0) entries.add(PieEntry(apk,       "APK"))
+        if (archives  > 0) entries.add(PieEntry(archives,  "Archives"))
+        if (code      > 0) entries.add(PieEntry(code,      "Code/Data"))
+        if (others    > 0) entries.add(PieEntry(others,    "Others"))
 
         val dataSet = PieDataSet(entries, "").apply {
             colors = listOf(
-                Color.parseColor("#4A90E2"), Color.parseColor("#F5A623"),
-                Color.parseColor("#7ED321"), Color.parseColor("#9B59B6"),
-                Color.parseColor("#E74C3C"), Color.parseColor("#1ABC9C"),
-                Color.parseColor("#BDC3C7"))
+                Color.parseColor("#E74C3C"), // Images   - red
+                Color.parseColor("#9B59B6"), // Videos   - purple
+                Color.parseColor("#1ABC9C"), // Audio    - teal
+                Color.parseColor("#4A90E2"), // Docs     - blue
+                Color.parseColor("#F5A623"), // APK      - amber
+                Color.parseColor("#7ED321"), // Archives - green
+                Color.parseColor("#34495E"), // Code     - dark
+                Color.parseColor("#BDC3C7")  // Others   - grey
+            )
         }
         val data = PieData(dataSet).apply { setValueFormatter(PercentFormatter(pieChart)) }
 
@@ -475,13 +512,15 @@ class SecondActivity : Activity() {
                 val filtered = allFiles.filter {
                     val n = it.name.lowercase()
                     when (label) {
-                        "Documents" -> n.endsWith(".pdf")||n.endsWith(".doc")||n.endsWith(".txt")
-                        "APK"       -> n.endsWith(".apk")
-                        "Archives"  -> n.endsWith(".zip")||n.endsWith(".rar")
-                        "Videos"    -> n.endsWith(".mp4")||n.endsWith(".mkv")
-                        "Images"    -> n.endsWith(".jpg")||n.endsWith(".png")
-                        "Audio"     -> n.endsWith(".mp3")
-                        else        -> true
+                        "Images"    -> isImage(n)
+                        "Videos"    -> isVideo(n)
+                        "Audio"     -> isAudio(n)
+                        "Documents" -> isDocument(n)
+                        "APK"       -> isApk(n)
+                        "Archives"  -> isArchive(n)
+                        "Code/Data" -> isCode(n)
+                        else        -> !isImage(n) && !isVideo(n) && !isAudio(n) &&
+                                !isDocument(n) && !isApk(n) && !isArchive(n) && !isCode(n)
                     }
                 }
                 filterSizeText.text = "$label: ${formatSize(filtered.sumOf { it.length() })}"
@@ -494,12 +533,14 @@ class SecondActivity : Activity() {
                 filterSizeText.text = ""
                 pieChart.centerText = getTotalStorage()
                 pieChart.invalidate()
+                applyFilter(filterSpinner.selectedItem.toString())
             }
         })
         pieChart.invalidate()
     }
 
     private fun getTotalStorage(): String = formatSize(allFiles.sumOf { it.length() })
+
     private fun applyFilter(type: String) {
         val filtered = FileFilters.filterFiles(
             allFiles, type,
@@ -553,9 +594,9 @@ class SecondActivity : Activity() {
                 val nameView = TextView(this@SecondActivity).apply {
                     val ageMs = System.currentTimeMillis() - file.lastModified()
                     val ageStr = when {
-                        ageMs < 60 * 60 * 1000L              -> "${ageMs / (60 * 1000L)} min ago"
-                        ageMs < 24 * 60 * 60 * 1000L          -> "${ageMs / (60 * 60 * 1000L)} hr ago"
-                        else                                   -> "${ageMs / (24 * 60 * 60 * 1000L)} days ago"
+                        ageMs < 60 * 60 * 1000L         -> "${ageMs / (60 * 1000L)} min ago"
+                        ageMs < 24 * 60 * 60 * 1000L    -> "${ageMs / (60 * 60 * 1000L)} hr ago"
+                        else                             -> "${ageMs / (24 * 60 * 60 * 1000L)} days ago"
                     }
                     text = "${file.name}\n${formatSize(file.length())}  •  $ageStr"
                     setTextColor(Color.parseColor("#1A1A2E"))
@@ -659,6 +700,7 @@ class SecondActivity : Activity() {
         }
         listView.adapter = adapter
     }
+
     private fun addChips(row: LinearLayout, tags: List<String>) {
         val colours = listOf(
             "#4A90E2" to "#EBF3FF",
@@ -686,6 +728,7 @@ class SecondActivity : Activity() {
             })
         }
     }
+
     private fun formatSize(size: Long): String {
         val kb = size / 1024; val mb = kb / 1024; val gb = mb / 1024
         return when { gb > 0 -> "$gb GB"; mb > 0 -> "$mb MB"; else -> "$kb KB" }
