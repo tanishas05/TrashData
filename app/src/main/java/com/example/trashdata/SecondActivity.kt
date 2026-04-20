@@ -672,7 +672,7 @@ class SecondActivity : Activity() {
                     setPadding(0, 10, 0, 0)
                 }
                 chipRow.addView(TextView(this@SecondActivity).apply {
-                    text = "AI ✨ "
+                    text = "Keywords: "
                     textSize = 11f
                     setTextColor(Color.parseColor("#9CA3AF"))
                 })
