@@ -150,11 +150,11 @@ class RecycleBinActivity : Activity() {
             setPadding(40, 40, 40, 40)
             setOnClickListener { onClick() }
         }
-        drawerMenu.addView(drawerItem("🧹  Cleaner") {
+        drawerMenu.addView(drawerItem("🧹  Scanner") {
             startActivity(Intent(this, MainActivity::class.java))
             drawerLayout.closeDrawer(GravityCompat.START)
         })
-        drawerMenu.addView(drawerItem("📁  Files") {
+        drawerMenu.addView(drawerItem("📁 All Files") {
             startActivity(Intent(this, SecondActivity::class.java))
             drawerLayout.closeDrawer(GravityCompat.START)
         })

@@ -342,11 +342,11 @@ class SecondActivity : Activity() {
             setPadding(40, 40, 40, 40)
             setOnClickListener { onClick() }
         }
-        drawerMenu.addView(drawerItem("🧹  Cleaner") {
+        drawerMenu.addView(drawerItem("🧹  Scanner") {
             startActivity(Intent(this, MainActivity::class.java))
             drawerLayout.closeDrawer(GravityCompat.START)
         })
-        drawerMenu.addView(drawerItem("📁  Files") {
+        drawerMenu.addView(drawerItem("📁  All Files") {
             drawerLayout.closeDrawer(GravityCompat.START)
         })
         drawerMenu.addView(drawerItem("🗑  Recycle Bin") {

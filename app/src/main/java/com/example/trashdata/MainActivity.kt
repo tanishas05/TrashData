@@ -474,7 +474,7 @@ class MainActivity : Activity() {
         drawerMenu.addView(drawerHeader)
 
         val menuCleaner = TextView(this).apply {
-            text = "🧹  Cleaner"
+            text = "🧹  Scanner"
             textSize = 15f
             setTextColor(Color.parseColor("#1A1A2E"))
             setPadding(40, 40, 40, 40)
@@ -485,7 +485,7 @@ class MainActivity : Activity() {
         }
 
         val menuFiles = TextView(this).apply {
-            text = "📁  Files"
+            text = "📁  All Files"
             textSize = 15f
             setTextColor(Color.parseColor("#1A1A2E"))
             setPadding(40, 40, 40, 40)
