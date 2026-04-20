@@ -28,6 +28,24 @@ object FileRepository {
         }
     }
 
+    fun addFile(file: File) {
+        if (!file.exists()) return
+        if (junkFiles.any { it.absolutePath == file.absolutePath }) return
+        junkFiles.add(file)
+        // Re-check for duplicates against existing files using name+size fast-path
+        val key = "${file.name}|${file.length()}"
+        val candidates = junkFiles.filter { it.name == file.name && it.length() == file.length() }
+        if (candidates.size > 1) {
+            val hash = getFileHash(file)
+            if (hash.isNotEmpty()) {
+                fileHashMap[file] = hash
+                duplicateMap.getOrPut(hash) { CopyOnWriteArrayList() }.let { group ->
+                    if (!group.any { it.absolutePath == file.absolutePath }) group.add(file)
+                }
+            }
+        }
+    }
+
     fun buildDuplicateMap() {
         fileHashMap.clear()
         duplicateMap.clear()

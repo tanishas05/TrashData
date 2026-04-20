@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 
 class RecycleBinActivity : Activity() {
 
@@ -261,7 +262,13 @@ class RecycleBinActivity : Activity() {
                                     if (ok) "Restored to ${entry.originalPath}" else "Restore failed",
                                     Toast.LENGTH_SHORT
                                 ).show()
-                                if (ok) refreshList()
+                                if (ok) {
+                                    // Add back to global repository so dashboard reflects it
+                                    FileRepository.addFile(java.io.File(entry.originalPath))
+                                    LocalBroadcastManager.getInstance(this@RecycleBinActivity)
+                                        .sendBroadcast(Intent(FileScanWorker.ACTION_FILES_CHANGED))
+                                    refreshList()
+                                }
                             }
                             .setNegativeButton("Cancel", null)
                             .show()
