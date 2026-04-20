@@ -106,7 +106,6 @@ class FileScanWorker(context: Context, params: WorkerParameters) :
             sendToast("Cannot delete ${file.name}")
         }
     }
-
     fun stopScan() {
         cancelScan.set(true)
     }
