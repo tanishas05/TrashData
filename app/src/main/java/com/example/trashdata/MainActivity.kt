@@ -673,7 +673,7 @@ Tap to view and clean 🚀
         val duplicates = FileRepository.duplicateMap.values
             .filter { it.size > 1 }
             .sumOf { it.size - 1 }
-        val largeFiles = files.count { it.length() >= 1 * 1024 * 1024L }
+        val largeFiles = files.count { it.length() >= 10 * 1024 * 1024L }
         val oldFiles   = files.count { now - it.lastModified() > 15 * 60 * 1000L }
         val freeSpace  = try {
             val stat = android.os.StatFs(android.os.Environment.getExternalStorageDirectory().path)

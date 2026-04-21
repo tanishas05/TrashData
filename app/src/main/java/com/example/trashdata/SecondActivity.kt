@@ -185,7 +185,7 @@ class SecondActivity : Activity() {
                         when (type) {
                             "Duplicate Files" -> (FileRepository.duplicateMap[FileRepository.fileHashMap[f] ?: ""]?.size ?: 0) > 1
                             "Old Files"       -> now - f.lastModified() > 15L * 60 * 1000L
-                            "Large Files"     -> f.length() >= 1 * 1024 * 1024L
+                            "Large Files"     -> f.length() >= 10 * 1024 * 1024L
                             else              -> true
                         }
                     }.sumOf { it.length() }

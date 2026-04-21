@@ -1,7 +1,7 @@
 package com.example.trashdata
 import java.io.File
 object FileFilters {
-    private const val LARGE_FILE_SIZE = 1 * 1024 * 1024L
+    private const val LARGE_FILE_SIZE = 10 * 1024 * 1024L
     private const val OLD_FILE_THRESHOLD = 15L * 60 * 1000L // 15 minutes
     enum class SortMode { SIZE_HIGH_LOW, SIZE_LOW_HIGH, DATE_NEWEST, DATE_OLDEST }
     fun filterFiles(
