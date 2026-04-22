@@ -60,3 +60,6 @@ TrashData is an Android file cleaner app built in Kotlin. It scans your device f
 
 - All Files Access (for scanning storage)
 - Notifications (for scan completion alerts)
+
+## Contributors
+Built by Tanisha Sharma and Tavleen Kaur, as a part of the Mobile Application Development Course at IGDTUW 
